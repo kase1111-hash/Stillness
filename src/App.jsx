@@ -111,6 +111,10 @@ export default function App() {
         error={error}
         onRetry={handleRetry}
       />
+      {/* Restart button — spec UX flow 6: user can start a new session at any time. */}
+      <button onClick={handleBegin} style={styles.restartBtn}>
+        Start over
+      </button>
     </>
   );
 }
@@ -159,5 +163,18 @@ const styles = {
     color: "#fff",
     cursor: "pointer",
     transition: "background-color 0.2s",
+  },
+  restartBtn: {
+    position: "fixed",
+    top: "16px",
+    right: "16px",
+    zIndex: 2,
+    padding: "6px 14px",
+    fontSize: "12px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    borderRadius: "6px",
+    backgroundColor: "transparent",
+    color: "rgba(255,255,255,0.5)",
+    cursor: "pointer",
   },
 };
