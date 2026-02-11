@@ -9,11 +9,20 @@
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background: #0a0a0a;
-        color: #fff;
+        background: #1e1814;
+        color: #2a2118;
         overflow: hidden;
       }
       #root { height: 100vh; }
+
+      /* Warm-toned scrollbar for chat panels. */
+      ::-webkit-scrollbar { width: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(92, 74, 58, 0.25); border-radius: 3px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(92, 74, 58, 0.4); }
+
+      /* Focus styles for inputs. */
+      input:focus { border-color: rgba(92, 74, 58, 0.35) !important; }
     </style>
   </head>
   <body>
