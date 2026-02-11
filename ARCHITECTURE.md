@@ -17,20 +17,21 @@
 
 | File | Purpose | Reqs |
 |------|---------|------|
-| `server.js` | Express proxy — GET `/api/topics` + POST `/api/chat`. Hard safety regex filter on input/output. Forwards to Anthropic or Ollama based on `LLM_PROVIDER` env var. | 3, 6, 7, edge:api-failure |
+| `server.js` | Express proxy — GET `/api/topics` + POST `/api/chat`. Imports safety filter from shared module. 30s LLM timeout. Forwards to Anthropic or Ollama based on `LLM_PROVIDER` env var. | 3, 6, 7, edge:api-failure, edge:timeout |
 | `src/main.jsx` | React entry point, mounts App | — |
 | `src/App.jsx` | Top-level layout, holds all session state, orchestrates phase transitions (landing → topics → active → resolved/safety), topic selection, safety exit with crisis resources | 1, 4, 5, 9, 10 |
 | `src/Chat.jsx` | Message list + input field, input validation, loading state. Dynamic character name via prop. | 1, 2, edge:empty, edge:long, edge:rapid |
 | `src/Environment.jsx` | Full-screen background — therapist office with window (sky, clouds, rain), lamp glow, plant silhouette — all driven by distress prop | 8 |
 | `src/api.js` | `fetchTopics()` + `sendMessage(messages, topic)` → calls proxy → returns `{ message, distress, safety }` | 3, 6, 7, edge:api-failure |
-| `src/prompt.js` | Topic definitions (5 characters), per-topic system prompts, shared distress/safety/output rules | 3, 6, 7 |
+| `src/prompt.js` | Topic definitions (5 characters with descriptive archetypes), per-topic system prompts, shared distress/safety/output rules | 3, 6, 7 |
+| `src/safety.js` | Shared safety filter — expanded regex patterns, exit message, `checkSafety()` function. Imported by `server.js` and `test-e2e.js` | — |
 | `index.html` | Shell HTML | — |
 | `package.json` | Project metadata, dependencies, and npm scripts | — |
 | `vite.config.js` | Vite config — React plugin, dev server proxy from `/api` to Express | — |
 | `.gitignore` | Excludes `node_modules/` and `dist/` from version control | — |
-| `test-e2e.js` | E2E test suite — mock LLM, safety filter, topic routing, 20 test runs | — |
+| `test-e2e.js` | E2E test suite — mock LLM, shared safety filter, topic routing, 20 test runs | — |
 
-**12 files total.** Every numbered requirement (1–10) and every edge case appears in at least one file's responsibility list.
+**13 files total.** Every numbered requirement (1–10) and every edge case appears in at least one file's responsibility list.
 
 ## Data Model
 
@@ -45,11 +46,11 @@
 **Topics** (5 built-in):
 | ID | Character | Theme |
 |----|-----------|-------|
-| `anxiety` | Aria | Overwhelmed by worry and fear |
-| `grief` | Eliot | Processing loss |
-| `loneliness` | Maya | Feeling isolated |
-| `stress` | Jordan | Crushed under pressure |
-| `self-doubt` | Sam | Feeling not good enough |
+| `anxiety` | The New Graduate | Terrified of the future after finishing school |
+| `grief` | The Widowed Parent | Lost a partner, raising kids alone |
+| `loneliness` | The Night-Shift Worker | Drifting further from connection every day |
+| `stress` | The Single Parent | Juggling everything with no help |
+| `self-doubt` | The Overworked Office Worker | Passed over again, questioning everything |
 
 ## Component Breakdown
 
@@ -96,7 +97,7 @@ All state lives in `App.jsx` via React `useState`. No external store.
 
 ## Safety Architecture
 
-**Layer 1 — Hard regex filter (server.js):** Six regex patterns catch clearly dangerous content (violence toward specific targets, self-harm methods, sexual content, assault) before the LLM is ever called. Returns a compassionate exit message and `safety: true`.
+**Layer 1 — Hard regex filter (src/safety.js):** Expanded regex patterns catch clearly dangerous content (violence toward specific targets, self-harm methods and planning, sexual content, assault, child exploitation, drug manufacturing, weapons creation) before the LLM is ever called. Shared module imported by both `server.js` and `test-e2e.js`. Returns a compassionate exit message and `safety: true`.
 
 **Layer 2 — LLM soft safety (system prompt):** The system prompt instructs the LLM to set `"safety": true` in its JSON output if the user's message is outside the scope of supportive conversation. This handles nuanced/contextual cases the regex can't catch.
 

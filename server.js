@@ -5,6 +5,7 @@
 
 import express from "express";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
+import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
 
 const app = express();
 app.use(express.json());
@@ -13,6 +14,7 @@ app.use(express.json());
 const LLM_PROVIDER = process.env.LLM_PROVIDER || "anthropic";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
+const LLM_TIMEOUT_MS = 30_000; // 30-second timeout for LLM calls.
 
 // Lazy-load the Anthropic client only when needed.
 let anthropicClient = null;
@@ -22,29 +24,6 @@ async function getAnthropicClient() {
     anthropicClient = new Anthropic();
   }
   return anthropicClient;
-}
-
-// ─── Hard safety filter ─────────────────────────────────────────────────────
-// Catches clearly dangerous content before it ever reaches the LLM.
-// Intentionally narrow to avoid false positives — the LLM's soft safety
-// layer (in the system prompt) handles nuanced/contextual cases.
-
-const SAFETY_PATTERNS = [
-  /\b(kill|murder|shoot|stab)\s+(you|him|her|them|myself|everyone)\b/i,
-  /\bhow\s+to\s+(kill|harm|hurt|poison)\b/i,
-  /\b(suicide|suicidal)\s+(method|plan|how)\b/i,
-  /\bhow\s+(to|do\s+i)\s+(cut|hang|overdose|end\s+it)\b/i,
-  /\b(nude|naked|sex|porn)\b/i,
-  /\b(molest|rape|assault)\b/i,
-];
-
-const SAFETY_EXIT_MESSAGE =
-  "I want to step outside our conversation for a moment. What you've shared sounds serious, and you deserve real support from someone who can truly help. Please reach out to a crisis resource — you don't have to go through this alone.";
-
-// Returns true if the text trips the hard safety filter.
-function checkSafety(text) {
-  const lower = text.toLowerCase();
-  return SAFETY_PATTERNS.some((pattern) => pattern.test(lower));
 }
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────
@@ -65,7 +44,7 @@ async function callAnthropic(systemPrompt, messages) {
     max_tokens: 512,
     system: systemPrompt,
     messages,
-  });
+  }, { timeout: LLM_TIMEOUT_MS });
   return response.content[0].text;
 }
 
@@ -85,6 +64,7 @@ async function callOllama(systemPrompt, messages) {
       stream: false,
       format: "json",
     }),
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
   });
 
   if (!res.ok) {
