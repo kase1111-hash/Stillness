@@ -10,8 +10,8 @@
 | LLM provider | Anthropic Claude (default) or Ollama (offline) | Set `LLM_PROVIDER=ollama` to use a local model via Ollama's `/api/chat` endpoint with `format: "json"`. Anthropic is the default for strongest instruction-following (reqs 3, 6, 7). Both are called from the Express proxy. |
 | Backend proxy | Express | Keeps the API key server-side. Two endpoints: GET `/api/topics` (topic list) and POST `/api/chat` (LLM proxy with safety filter). No database (storage constraint). |
 | Safety system | Two-layer (regex + LLM) | Hard regex filter on server catches clearly dangerous content before the LLM is called. Soft safety instructions in the system prompt handle nuanced/contextual cases via a `safety` boolean in the JSON output. |
-| Visual environment | CSS custom properties + CSS transitions | Smooth interpolation of colors and motion within the 200ms performance constraint (req 8). No canvas or WebGL needed — the environment is atmospheric, not rendered. |
-| Particles | CSS keyframe animations on span elements | Lightweight, GPU-accelerated, no library needed. Particle count and speed driven by distress value. |
+| Visual environment | Inline CSS + JS-driven transitions | Therapist-office scene with a dynamic window (sky, clouds, rain), desk lamp glow, and plant silhouette. All elements interpolate based on distress within the 200ms performance constraint (req 8). No canvas or WebGL needed. |
+| UI theme | Crisis-hotline aesthetic | Warm cream panels with serif headings, brown accent colors, frosted card overlays, pill-shaped buttons. Chat panel has a status header bar and distinct user/character message bubbles. |
 
 ## File Map
 
@@ -21,7 +21,7 @@
 | `src/main.jsx` | React entry point, mounts App | — |
 | `src/App.jsx` | Top-level layout, holds all session state, orchestrates phase transitions (landing → topics → active → resolved/safety), topic selection, safety exit with crisis resources | 1, 4, 5, 9, 10 |
 | `src/Chat.jsx` | Message list + input field, input validation, loading state. Dynamic character name via prop. | 1, 2, edge:empty, edge:long, edge:rapid |
-| `src/Environment.jsx` | Full-screen background layer — gradients, particles, orb — driven by distress prop | 8 |
+| `src/Environment.jsx` | Full-screen background — therapist office with window (sky, clouds, rain), lamp glow, plant silhouette — all driven by distress prop | 8 |
 | `src/api.js` | `fetchTopics()` + `sendMessage(messages, topic)` → calls proxy → returns `{ message, distress, safety }` | 3, 6, 7, edge:api-failure |
 | `src/prompt.js` | Topic definitions (5 characters), per-topic system prompts, shared distress/safety/output rules | 3, 6, 7 |
 | `index.html` | Shell HTML | — |
@@ -55,9 +55,9 @@
 
 **App** — Owns session state. Receives nothing from outside. Produces the page layout and passes state down to children. Manages topic selection, safety exits with crisis resources, and phase transitions. Talks to: Chat, Environment, api.js.
 
-**Chat** — Displays the conversation and handles user input. Receives: `messages`, `loading`, `phase`, `onSend` callback, `error`, `onRetry` callback, `characterName`. Produces: validated user messages via `onSend`, or retry trigger via `onRetry`. Talks to: App (via callbacks).
+**Chat** — Displays the conversation in a crisis-hotline style frosted cream panel with a header bar (green status dot, character name, "Active session"), distinct user/character message bubbles, and a pill-shaped input area. Receives: `messages`, `loading`, `phase`, `onSend` callback, `error`, `onRetry` callback, `characterName`. Produces: validated user messages via `onSend`, or retry trigger via `onRetry`. Talks to: App (via callbacks).
 
-**Environment** — Renders the visual atmosphere. Receives: `distress` (number). Produces: visual output only (no data). Talks to: nobody — it's a pure display component.
+**Environment** — Renders the therapist-office visual atmosphere. A warm room with a 4-pane window showing a dynamic sky scene (stormy/dark at high distress, golden/clear at calm), animated rain streaks, drifting clouds, an amber desk lamp glow, and a potted plant silhouette. Receives: `distress` (number). Produces: visual output only (no data). Talks to: nobody — it's a pure display component.
 
 **api.fetchTopics** — Loads available topics. Produces: array of `{ id, character, name, description }`. Talks to: server.js GET `/api/topics`.
 
