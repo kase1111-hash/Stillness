@@ -1,5 +1,6 @@
 // Top-level component — owns all session state, orchestrates phase transitions,
 // topic selection, safety exits, and wires Chat + Environment together.
+// Styled with a warm therapist-office / crisis-hotline aesthetic.
 
 import { useState, useCallback, useEffect } from "react";
 import Chat from "./Chat.jsx";
@@ -122,7 +123,7 @@ export default function App() {
     return (
       <div style={styles.centered}>
         <Environment distress={INITIAL_DISTRESS} />
-        <div style={styles.overlay}>
+        <div style={styles.card}>
           <h1 style={styles.title}>Stillness</h1>
           <p style={styles.subtitle}>
             Practice listening. Practice empathy. Someone needs to be heard.
@@ -141,11 +142,11 @@ export default function App() {
     return (
       <div style={styles.centered}>
         <Environment distress={6} />
-        <div style={{ ...styles.overlay, maxWidth: "560px" }}>
-          <h2 style={{ ...styles.title, fontSize: "32px", marginBottom: "8px" }}>
+        <div style={{ ...styles.card, maxWidth: "540px" }}>
+          <h2 style={{ ...styles.title, fontSize: "28px", marginBottom: "6px" }}>
             Choose a conversation
           </h2>
-          <p style={{ ...styles.subtitle, marginBottom: "24px" }}>
+          <p style={{ ...styles.subtitle, marginBottom: "20px" }}>
             Each person is going through something different. Your role is to listen.
           </p>
           <div style={styles.topicGrid}>
@@ -172,7 +173,7 @@ export default function App() {
     return (
       <div style={styles.centered}>
         <Environment distress={0} />
-        <div style={{ ...styles.overlay, maxWidth: "480px" }}>
+        <div style={{ ...styles.card, maxWidth: "480px" }}>
           <p style={styles.safetyMessage}>{safetyMsg}</p>
           <div style={styles.resourceList}>
             <p style={styles.resourceHeader}>Real support is available:</p>
@@ -184,8 +185,8 @@ export default function App() {
                 rel="noopener noreferrer"
                 style={styles.resourceLink}
               >
-                <strong>{r.name}</strong>
-                <span style={{ opacity: 0.7, fontSize: "13px" }}>{r.detail}</span>
+                <strong style={{ color: "#2a2118" }}>{r.name}</strong>
+                <span style={{ color: "#6b5d50", fontSize: "13px" }}>{r.detail}</span>
               </a>
             ))}
           </div>
@@ -203,7 +204,7 @@ export default function App() {
     return (
       <div style={styles.centered}>
         <Environment distress={0} />
-        <div style={styles.overlay}>
+        <div style={styles.card}>
           <p style={styles.closing}>
             Stillness reached. Thank you for being here.
           </p>
@@ -236,6 +237,7 @@ export default function App() {
   );
 }
 
+// Warm therapist-office aesthetic — cream cards, serif headings, soft browns.
 const styles = {
   centered: {
     position: "relative",
@@ -244,42 +246,50 @@ const styles = {
     justifyContent: "center",
     height: "100vh",
   },
-  overlay: {
+  card: {
     position: "relative",
     zIndex: 1,
     textAlign: "center",
-    color: "#fff",
-    padding: "40px",
+    padding: "36px 40px",
+    backgroundColor: "rgba(245, 240, 232, 0.93)",
+    borderRadius: "16px",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.1)",
+    margin: "0 16px",
+    maxWidth: "460px",
   },
   title: {
-    fontSize: "48px",
-    fontWeight: 300,
-    letterSpacing: "6px",
-    margin: "0 0 16px",
+    fontSize: "40px",
+    fontWeight: 400,
+    letterSpacing: "4px",
+    margin: "0 0 12px",
+    color: "#2a2118",
+    fontFamily: "Georgia, 'Times New Roman', serif",
   },
   subtitle: {
-    fontSize: "16px",
-    opacity: 0.7,
-    margin: "0 0 32px",
-    maxWidth: "420px",
+    fontSize: "15px",
+    color: "#6b5d50",
+    margin: "0 0 28px",
+    lineHeight: 1.6,
+    maxWidth: "380px",
     marginLeft: "auto",
     marginRight: "auto",
   },
   closing: {
-    fontSize: "18px",
-    opacity: 0.8,
-    margin: "0 0 32px",
-    maxWidth: "360px",
+    fontSize: "17px",
+    color: "#3a2e22",
+    margin: "0 0 24px",
+    maxWidth: "340px",
     lineHeight: 1.6,
+    fontFamily: "Georgia, 'Times New Roman', serif",
   },
   button: {
     padding: "12px 32px",
-    fontSize: "16px",
-    letterSpacing: "2px",
-    border: "1px solid rgba(255,255,255,0.3)",
-    borderRadius: "8px",
-    backgroundColor: "transparent",
-    color: "#fff",
+    fontSize: "15px",
+    letterSpacing: "1px",
+    border: "none",
+    borderRadius: "24px",
+    backgroundColor: "#5c4a3a",
+    color: "#f5f0e8",
     cursor: "pointer",
     transition: "background-color 0.2s",
   },
@@ -288,65 +298,70 @@ const styles = {
     top: "16px",
     right: "16px",
     zIndex: 2,
-    padding: "6px 14px",
+    padding: "8px 16px",
     fontSize: "12px",
-    border: "1px solid rgba(255,255,255,0.2)",
-    borderRadius: "6px",
-    backgroundColor: "transparent",
-    color: "rgba(255,255,255,0.5)",
+    border: "1px solid rgba(245,240,232,0.25)",
+    borderRadius: "20px",
+    backgroundColor: "rgba(0,0,0,0.3)",
+    color: "rgba(245,240,232,0.7)",
     cursor: "pointer",
+    backdropFilter: "blur(6px)",
   },
   // Topic selection grid.
   topicGrid: {
     display: "grid",
     gridTemplateColumns: "1fr 1fr",
-    gap: "12px",
+    gap: "10px",
+    textAlign: "left",
   },
   topicCard: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "4px",
-    padding: "16px",
-    borderRadius: "10px",
-    border: "1px solid rgba(255,255,255,0.15)",
-    backgroundColor: "rgba(255,255,255,0.05)",
-    color: "#fff",
+    gap: "3px",
+    padding: "14px 16px",
+    borderRadius: "12px",
+    border: "1px solid rgba(0,0,0,0.07)",
+    backgroundColor: "#fff",
+    color: "#2a2118",
     cursor: "pointer",
     textAlign: "left",
-    transition: "background-color 0.2s",
+    transition: "background-color 0.2s, box-shadow 0.2s",
   },
   topicCharacter: {
-    fontSize: "18px",
-    fontWeight: 500,
+    fontSize: "17px",
+    fontWeight: 600,
+    color: "#2a2118",
+    fontFamily: "Georgia, 'Times New Roman', serif",
   },
   topicName: {
-    fontSize: "12px",
+    fontSize: "11px",
     textTransform: "uppercase",
     letterSpacing: "1.5px",
-    opacity: 0.5,
+    color: "#9e8b78",
   },
   topicDesc: {
     fontSize: "13px",
-    opacity: 0.7,
+    color: "#6b5d50",
     lineHeight: 1.4,
   },
   // Safety exit.
   safetyMessage: {
-    fontSize: "16px",
-    lineHeight: 1.6,
-    opacity: 0.9,
-    margin: "0 0 24px",
+    fontSize: "15px",
+    lineHeight: 1.7,
+    color: "#3a2e22",
+    margin: "0 0 20px",
+    textAlign: "left",
   },
   resourceList: {
     textAlign: "left",
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
+    gap: "8px",
   },
   resourceHeader: {
-    fontSize: "14px",
-    opacity: 0.6,
+    fontSize: "12px",
+    color: "#9e8b78",
     margin: "0 0 4px",
     textTransform: "uppercase",
     letterSpacing: "1px",
@@ -356,9 +371,10 @@ const styles = {
     flexDirection: "column",
     gap: "2px",
     padding: "10px 14px",
-    borderRadius: "8px",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    color: "#fff",
+    borderRadius: "10px",
+    backgroundColor: "rgba(92, 74, 58, 0.06)",
     textDecoration: "none",
+    border: "1px solid rgba(0,0,0,0.05)",
+    transition: "background-color 0.15s",
   },
 };
