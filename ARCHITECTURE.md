@@ -5,7 +5,7 @@
 | Decision | Choice | Why |
 |----------|--------|-----|
 | Language | JavaScript (ES modules) | Runs natively in the browser. No compilation required for simple projects. Satisfies platform constraint (web). |
-| UI framework | React 19 via CDN | Component model fits the three distinct UI regions (chat, environment, landing). Handles re-renders on state change efficiently (reqs 1, 8). |
+| UI framework | React 19 via npm | Component model fits the three distinct UI regions (chat, environment, landing). Handles re-renders on state change efficiently (reqs 1, 8). |
 | Build tool | Vite | Fast dev server, zero-config React support, single command to build for production. |
 | LLM provider | Anthropic Claude API (Sonnet) | Strong instruction-following for structured JSON output (reqs 3, 6, 7). Called from a lightweight backend proxy to keep API keys off the client. |
 | Backend proxy | Express (single route) | Needed solely to keep the API key server-side. One POST endpoint, no database (storage constraint). |
@@ -24,14 +24,17 @@
 | `src/api.js` | `sendMessage(messages)` → calls proxy → returns `{ message, distress }` | 3, 6, 7, edge:api-failure |
 | `src/prompt.js` | Aria's system prompt — personality, distress rules, JSON output format | 3, 6, 7 |
 | `index.html` | Shell HTML | — |
+| `package.json` | Project metadata, dependencies, and npm scripts | — |
+| `vite.config.js` | Vite config — React plugin, dev server proxy from `/api` to Express | — |
+| `.gitignore` | Excludes `node_modules/` and `dist/` from version control | — |
 
-**8 files total.** Every numbered requirement (1–10) and every edge case appears in at least one file's responsibility list.
+**11 files total.** Every numbered requirement (1–10) and every edge case appears in at least one file's responsibility list.
 
 ## Data Model
 
 **Message** — A single conversational turn. Fields: `role` (either "user" or "aria"), `text` (string).
 
-**Session** — The full state of one playthrough. Fields: `messages` (ordered list of Messages), `distress` (integer 0–10), `phase` (one of "landing", "active", "resolved"), `loading` (boolean, true while awaiting API response).
+**Session** — The full state of one playthrough. Fields: `messages` (ordered list of Messages), `distress` (integer 0–10), `phase` (one of "landing", "active", "resolved"), `loading` (boolean, true while awaiting API response), `error` (boolean, true when the last API call failed).
 
 **API Response** — What the LLM returns per turn. Fields: `message` (string, Aria's reply), `distress` (integer, her updated level). Parsed from structured JSON in the model output.
 
@@ -39,7 +42,7 @@
 
 **App** — Owns session state. Receives nothing from outside. Produces the page layout and passes state down to children. Talks to: Chat, Environment, api.js.
 
-**Chat** — Displays the conversation and handles user input. Receives: `messages`, `loading`, `phase`, `onSend` callback. Produces: validated user messages via `onSend`. Talks to: App (via callback).
+**Chat** — Displays the conversation and handles user input. Receives: `messages`, `loading`, `phase`, `onSend` callback, `error`, `onRetry` callback. Produces: validated user messages via `onSend`, or retry trigger via `onRetry`. Talks to: App (via callbacks).
 
 **Environment** — Renders the visual atmosphere. Receives: `distress` (number). Produces: visual output only (no data). Talks to: nobody — it's a pure display component.
 
@@ -49,7 +52,7 @@
 
 1. User opens app → App renders in `phase: "landing"`.
 2. User clicks "Begin" → App sets `phase: "active"`, `distress: 8`.
-3. App calls `api.sendMessage([])` with empty history → Aria's opening message arrives.
+3. App calls `api.sendMessage([])` with empty history → server injects a synthetic `"(session start)"` user message (Claude API requires at least one) → Aria's opening message arrives.
 4. App appends Aria's message to `messages`, updates `distress` → Environment transitions.
 5. User types a message in Chat, submits → Chat validates (non-empty, under 1000 chars), calls `onSend`.
 6. App appends user message to `messages`, sets `loading: true` → Chat disables input.
@@ -69,5 +72,6 @@ All state lives in `App.jsx` via React `useState`. No external store.
 | `distress` | number | `8` | Every API response updates it |
 | `messages` | array | `[]` | Appended on each user submit and each API response |
 | `loading` | boolean | `false` | `true` when API call in flight, `false` on response or error |
+| `error` | boolean | `false` | `true` when API call fails, cleared on next send or retry |
 
 No conflicting requirements were found. No requirement is unusually expensive — the costliest element is the LLM API call, which is inherent to the project and cannot be simplified away.
