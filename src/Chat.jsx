@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react";
 
 const MAX_LENGTH = 1000;
 
-export default function Chat({ messages, loading, phase, onSend, error, onRetry }) {
+export default function Chat({ messages, loading, phase, onSend, error, onRetry, characterName = "Aria" }) {
   const [input, setInput] = useState("");
   const [warning, setWarning] = useState("");
   const bottomRef = useRef(null);
@@ -49,7 +49,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry 
               ...(msg.role === "user" ? styles.userBubble : styles.ariaBubble),
             }}
           >
-            <span style={styles.role}>{msg.role === "user" ? "You" : "Aria"}</span>
+            <span style={styles.role}>{msg.role === "user" ? "You" : characterName}</span>
             <p style={styles.text}>{msg.text}</p>
           </div>
         ))}
@@ -57,7 +57,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry 
         {/* Loading indicator while waiting for Aria */}
         {loading && (
           <div style={{ ...styles.bubble, ...styles.ariaBubble }}>
-            <span style={styles.role}>Aria</span>
+            <span style={styles.role}>{characterName}</span>
             <p style={{ ...styles.text, opacity: 0.5 }}>...</p>
           </div>
         )}
@@ -65,7 +65,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry 
         {/* API error with retry */}
         {error && (
           <div style={styles.errorBox}>
-            <p style={styles.errorText}>Aria needs a moment...</p>
+            <p style={styles.errorText}>{characterName} needs a moment...</p>
             <button onClick={onRetry} style={styles.retryBtn}>
               Try again
             </button>

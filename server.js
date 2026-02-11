@@ -1,21 +1,20 @@
 // Express API proxy — single POST /api/chat route that forwards conversation
-// history to the configured LLM and returns Aria's structured response.
+// history to the configured LLM and returns a structured response.
+// Includes a hard safety filter on user input and LLM output.
 // Supports Anthropic Claude (default) and Ollama for offline use.
-// (Reqs 3, 6, 7, edge:api-failure)
 
 import express from "express";
-import { SYSTEM_PROMPT } from "./src/prompt.js";
+import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 
 const app = express();
 app.use(express.json());
 
-// LLM provider config — set LLM_PROVIDER=ollama to use a local model.
+// LLM provider config.
 const LLM_PROVIDER = process.env.LLM_PROVIDER || "anthropic";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
 
-// Lazy-load the Anthropic client only when needed, so Ollama users
-// don't need an ANTHROPIC_API_KEY set.
+// Lazy-load the Anthropic client only when needed.
 let anthropicClient = null;
 async function getAnthropicClient() {
   if (!anthropicClient) {
@@ -25,7 +24,32 @@ async function getAnthropicClient() {
   return anthropicClient;
 }
 
-// Converts our internal message format ({role, text}) to LLM API format ({role, content}).
+// ─── Hard safety filter ─────────────────────────────────────────────────────
+// Catches clearly dangerous content before it ever reaches the LLM.
+// Intentionally narrow to avoid false positives — the LLM's soft safety
+// layer (in the system prompt) handles nuanced/contextual cases.
+
+const SAFETY_PATTERNS = [
+  /\b(kill|murder|shoot|stab)\s+(you|him|her|them|myself|everyone)\b/i,
+  /\bhow\s+to\s+(kill|harm|hurt|poison)\b/i,
+  /\b(suicide|suicidal)\s+(method|plan|how)\b/i,
+  /\bhow\s+(to|do\s+i)\s+(cut|hang|overdose|end\s+it)\b/i,
+  /\b(nude|naked|sex|porn)\b/i,
+  /\b(molest|rape|assault)\b/i,
+];
+
+const SAFETY_EXIT_MESSAGE =
+  "I want to step outside our conversation for a moment. What you've shared sounds serious, and you deserve real support from someone who can truly help. Please reach out to a crisis resource — you don't have to go through this alone.";
+
+// Returns true if the text trips the hard safety filter.
+function checkSafety(text) {
+  const lower = text.toLowerCase();
+  return SAFETY_PATTERNS.some((pattern) => pattern.test(lower));
+}
+
+// ─── Shared helpers ─────────────────────────────────────────────────────────
+
+// Converts internal message format ({role, text}) to LLM format ({role, content}).
 function formatMessages(messages) {
   return messages.map((m) => ({
     role: m.role === "user" ? "user" : "assistant",
@@ -34,22 +58,21 @@ function formatMessages(messages) {
 }
 
 // Calls the Anthropic Claude API and returns the raw text response.
-async function callAnthropic(messages) {
+async function callAnthropic(systemPrompt, messages) {
   const client = await getAnthropicClient();
   const response = await client.messages.create({
     model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-5-20250929",
     max_tokens: 512,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     messages,
   });
   return response.content[0].text;
 }
 
 // Calls the Ollama /api/chat endpoint and returns the raw text response.
-// Uses format: "json" to enforce structured JSON output.
-async function callOllama(messages) {
+async function callOllama(systemPrompt, messages) {
   const ollamaMessages = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...messages,
   ];
 
@@ -74,36 +97,69 @@ async function callOllama(messages) {
 }
 
 // Dispatches to the configured LLM provider.
-async function callLLM(messages) {
+async function callLLM(systemPrompt, messages) {
   if (LLM_PROVIDER === "ollama") {
-    return callOllama(messages);
+    return callOllama(systemPrompt, messages);
   }
-  return callAnthropic(messages);
+  return callAnthropic(systemPrompt, messages);
 }
 
-// Attempts to parse Aria's JSON response from the model output.
-function parseAriaResponse(text) {
+// Parses the LLM's JSON response and clamps distress to 0–10.
+function parseResponse(text) {
   const parsed = JSON.parse(text);
   return {
     message: String(parsed.message),
     distress: Math.max(0, Math.min(10, Math.round(Number(parsed.distress)))),
+    safety: parsed.safety === true,
   };
 }
 
+// ─── Routes ─────────────────────────────────────────────────────────────────
+
+// Serves the topic list to the client.
+app.get("/api/topics", (_req, res) => {
+  const list = TOPICS.map(({ id, character, name, description }) => ({
+    id, character, name, description,
+  }));
+  res.json(list);
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages } = req.body;
+    const { messages, topic } = req.body;
     const formatted = formatMessages(messages || []);
+
+    // Hard safety check on the latest user message.
+    const lastUserMsg = formatted.length > 0 ? formatted[formatted.length - 1] : null;
+    if (lastUserMsg && lastUserMsg.role === "user" && checkSafety(lastUserMsg.content)) {
+      return res.json({
+        message: SAFETY_EXIT_MESSAGE,
+        distress: 0,
+        safety: true,
+      });
+    }
+
+    const systemPrompt = getSystemPrompt(topic || "anxiety");
     const llmMessages = formatted.length > 0
       ? formatted
       : [{ role: "user", content: "(session start)" }];
 
-    const text = await callLLM(llmMessages);
-    const result = parseAriaResponse(text);
+    const text = await callLLM(systemPrompt, llmMessages);
+    const result = parseResponse(text);
+
+    // Safety check on LLM output.
+    if (checkSafety(result.message)) {
+      return res.json({
+        message: SAFETY_EXIT_MESSAGE,
+        distress: 0,
+        safety: true,
+      });
+    }
+
     res.json(result);
   } catch (err) {
     console.error("API error:", err.message);
-    res.status(500).json({ error: "Aria needs a moment" });
+    res.status(500).json({ error: "They need a moment" });
   }
 });
 

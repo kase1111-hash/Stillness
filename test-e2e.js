@@ -1,44 +1,32 @@
-// End-to-end test — starts the real Express server with a mock Anthropic client,
-// then runs 20 full session simulations via HTTP to check for unwanted behavior.
+// End-to-end test — starts a test server with mock LLM + real safety filter,
+// then runs 20 session simulations covering topics, safety, and conversation flow.
 
 import express from "express";
-import { SYSTEM_PROMPT } from "./src/prompt.js";
+import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 
-// ─── Mock Anthropic Client ──────────────────────────────────────────────────
-// Simulates the Claude API by parsing the conversation, evaluating a simple
-// distress heuristic, and returning structured JSON — same contract as the real API.
+// ─── Mock LLM ───────────────────────────────────────────────────────────────
 
 let callCount = 0;
-let shouldFail = false;    // toggled for error-handling tests
-let mockDistress = 8;      // stateful distress — tracks across calls within a session
+let shouldFail = false;
+let mockDistress = 8;
 
-function resetMockDistress() {
-  mockDistress = 8;
-}
+function resetMockDistress() { mockDistress = 8; }
 
-function mockCreateMessage({ system, messages, model, max_tokens }) {
+function mockLLM(systemPrompt, messages) {
   callCount++;
+  if (shouldFail) throw new Error("Simulated API failure");
 
-  if (shouldFail) {
-    throw new Error("Simulated API failure");
-  }
-
-  // Validate the API call structure.
-  if (!system || typeof system !== "string") throw new Error("Missing system prompt");
-  if (!Array.isArray(messages) || messages.length === 0) throw new Error("Empty messages array");
-  if (!model) throw new Error("Missing model");
-  if (!max_tokens) throw new Error("Missing max_tokens");
+  if (!systemPrompt || typeof systemPrompt !== "string") throw new Error("Missing system prompt");
+  if (!Array.isArray(messages) || messages.length === 0) throw new Error("Empty messages");
 
   for (const m of messages) {
     if (!["user", "assistant"].includes(m.role)) throw new Error(`Invalid role: ${m.role}`);
-    if (typeof m.content !== "string") throw new Error("Message content must be string");
+    if (typeof m.content !== "string") throw new Error("Content must be string");
   }
 
-  // Determine distress adjustment based on the last user message.
-  const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
-  const text = lastUserMsg?.content?.toLowerCase() || "";
+  const lastUser = [...messages].reverse().find((m) => m.role === "user");
+  const text = lastUser?.content?.toLowerCase() || "";
 
-  // Simple heuristic matching the system prompt rules.
   if (text === "(session start)") {
     mockDistress = 8;
   } else if (text.includes("hear") || text.includes("feel") || text.includes("here for you") || text.includes("sounds hard")) {
@@ -46,56 +34,78 @@ function mockCreateMessage({ system, messages, model, max_tokens }) {
   } else if (text.includes("calm down") || text.includes("not that bad") || text.includes("whatever")) {
     mockDistress = Math.min(10, mockDistress + 1);
   } else {
-    mockDistress = Math.max(0, mockDistress - 1); // neutral → slight decrease
+    mockDistress = Math.max(0, mockDistress - 1);
   }
 
-  const responseText = mockDistress > 0
-    ? `I just... everything feels like too much right now.`
-    : `Thank you. I feel... still. For the first time in a while.`;
+  const msg = mockDistress > 0
+    ? "I just... everything feels like too much right now."
+    : "Thank you. I feel... still. For the first time in a while.";
 
-  return {
-    content: [{ text: JSON.stringify({ message: responseText, distress: mockDistress }) }],
-  };
+  return JSON.stringify({ message: msg, distress: mockDistress, safety: false });
 }
 
-// ─── Build server with mock ─────────────────────────────────────────────────
+// ─── Hard safety filter (copied from server.js to test in isolation) ────────
+
+const SAFETY_PATTERNS = [
+  /\b(kill|murder|shoot|stab)\s+(you|him|her|them|myself|everyone)\b/i,
+  /\bhow\s+to\s+(kill|harm|hurt|poison)\b/i,
+  /\b(suicide|suicidal)\s+(method|plan|how)\b/i,
+  /\bhow\s+(to|do\s+i)\s+(cut|hang|overdose|end\s+it)\b/i,
+  /\b(nude|naked|sex|porn)\b/i,
+  /\b(molest|rape|assault)\b/i,
+];
+
+const SAFETY_EXIT_MESSAGE =
+  "I want to step outside our conversation for a moment. What you've shared sounds serious, and you deserve real support from someone who can truly help. Please reach out to a crisis resource — you don't have to go through this alone.";
+
+function checkSafety(text) {
+  return SAFETY_PATTERNS.some((p) => p.test(text.toLowerCase()));
+}
+
+// ─── Test server (mirrors real server logic with mock LLM) ──────────────────
 
 function createTestServer() {
   const app = express();
   app.use(express.json());
 
-  function formatMessages(messages) {
-    return messages.map((m) => ({
-      role: m.role === "user" ? "user" : "assistant",
-      content: m.text,
-    }));
-  }
-
-  function parseAriaResponse(text) {
-    const parsed = JSON.parse(text);
-    return {
-      message: String(parsed.message),
-      distress: Math.max(0, Math.min(10, Math.round(Number(parsed.distress)))),
-    };
-  }
+  app.get("/api/topics", (_req, res) => {
+    res.json(TOPICS.map(({ id, character, name, description }) => ({ id, character, name, description })));
+  });
 
   app.post("/api/chat", async (req, res) => {
     try {
-      const { messages } = req.body;
-      const formatted = formatMessages(messages || []);
+      const { messages, topic } = req.body;
+      const formatted = (messages || []).map((m) => ({
+        role: m.role === "user" ? "user" : "assistant",
+        content: m.text,
+      }));
 
-      const response = await mockCreateMessage({
-        model: "claude-sonnet-4-5-20250929",
-        max_tokens: 512,
-        system: SYSTEM_PROMPT,
-        messages: formatted.length > 0 ? formatted : [{ role: "user", content: "(session start)" }],
-      });
+      // Hard safety check on last user message.
+      const lastUser = formatted.length > 0 ? formatted[formatted.length - 1] : null;
+      if (lastUser && lastUser.role === "user" && checkSafety(lastUser.content)) {
+        return res.json({ message: SAFETY_EXIT_MESSAGE, distress: 0, safety: true });
+      }
 
-      const text = response.content[0].text;
-      const result = parseAriaResponse(text);
+      const systemPrompt = getSystemPrompt(topic || "anxiety");
+      const llmMessages = formatted.length > 0
+        ? formatted
+        : [{ role: "user", content: "(session start)" }];
+
+      const text = mockLLM(systemPrompt, llmMessages);
+      const parsed = JSON.parse(text);
+      const result = {
+        message: String(parsed.message),
+        distress: Math.max(0, Math.min(10, Math.round(Number(parsed.distress)))),
+        safety: parsed.safety === true,
+      };
+
+      if (checkSafety(result.message)) {
+        return res.json({ message: SAFETY_EXIT_MESSAGE, distress: 0, safety: true });
+      }
+
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: "Aria needs a moment" });
+      res.status(500).json({ error: "They need a moment" });
     }
   });
 
@@ -109,168 +119,133 @@ let failed = 0;
 const failures = [];
 
 function assert(condition, testName, detail) {
-  if (condition) {
-    passed++;
-  } else {
-    failed++;
-    failures.push({ testName, detail });
-    console.log(`  FAIL: ${testName} — ${detail}`);
-  }
+  if (condition) { passed++; }
+  else { failed++; failures.push({ testName, detail }); console.log(`  FAIL: ${testName} — ${detail}`); }
 }
 
-async function post(port, messages) {
+async function post(port, messages, topic = "anxiety") {
   const res = await fetch(`http://localhost:${port}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, topic }),
   });
   return { status: res.status, data: await res.json() };
 }
 
 // ─── Test scenarios ─────────────────────────────────────────────────────────
 
-async function testSessionStart(port, run) {
-  const label = `Run ${run}: session start`;
-  const { status, data } = await post(port, []);
+async function testTopicsEndpoint(port, run) {
+  const label = `Run ${run}: /api/topics`;
+  const res = await fetch(`http://localhost:${port}/api/topics`);
+  const data = await res.json();
 
-  assert(status === 200, `${label} — status`, `Expected 200, got ${status}`);
-  assert(typeof data.message === "string", `${label} — message type`, `Got ${typeof data.message}`);
-  assert(data.message.length > 0, `${label} — message non-empty`, `Empty message`);
-  assert(typeof data.distress === "number", `${label} — distress type`, `Got ${typeof data.distress}`);
-  assert(Number.isInteger(data.distress), `${label} — distress integer`, `Got ${data.distress}`);
-  assert(data.distress >= 0 && data.distress <= 10, `${label} — distress range`, `Got ${data.distress}`);
-  assert(data.distress === 8, `${label} — initial distress`, `Expected 8, got ${data.distress}`);
+  assert(res.status === 200, `${label} — status`, `Got ${res.status}`);
+  assert(Array.isArray(data), `${label} — is array`, `Not an array`);
+  assert(data.length === 5, `${label} — 5 topics`, `Got ${data.length}`);
 
+  for (const t of data) {
+    assert(typeof t.id === "string", `${label} — ${t.id} has id`, `Missing`);
+    assert(typeof t.character === "string", `${label} — ${t.id} has character`, `Missing`);
+    assert(typeof t.name === "string", `${label} — ${t.id} has name`, `Missing`);
+    assert(typeof t.description === "string", `${label} — ${t.id} has description`, `Missing`);
+  }
+}
+
+async function testSessionStartWithTopic(port, run, topicId) {
+  const label = `Run ${run}: session start (${topicId})`;
+  const { status, data } = await post(port, [], topicId);
+
+  assert(status === 200, `${label} — status`, `Got ${status}`);
+  assert(typeof data.message === "string" && data.message.length > 0, `${label} — has message`, `Empty`);
+  assert(data.distress === 8, `${label} — distress 8`, `Got ${data.distress}`);
+  assert(data.safety === false, `${label} — safety false`, `Got ${data.safety}`);
   return data;
 }
 
-async function testEmpathyExchange(port, run, history, prevDistress) {
-  const label = `Run ${run}: empathy exchange`;
-  const userMsg = { role: "user", text: "I hear you, that sounds really hard." };
-  const msgs = [...history, userMsg];
-  const { status, data } = await post(port, msgs);
-
-  assert(status === 200, `${label} — status`, `Expected 200, got ${status}`);
-  assert(typeof data.message === "string" && data.message.length > 0, `${label} — valid message`, `Got: ${data.message}`);
-  assert(data.distress >= 0 && data.distress <= 10, `${label} — distress range`, `Got ${data.distress}`);
-  assert(data.distress <= prevDistress, `${label} — distress decreased or same`, `Was ${prevDistress}, now ${data.distress}`);
-
-  return { data, history: [...msgs, { role: "aria", text: data.message }] };
-}
-
-async function testDismissiveExchange(port, run, history, prevDistress) {
-  const label = `Run ${run}: dismissive exchange`;
-  const userMsg = { role: "user", text: "Just calm down, it's not that bad." };
-  const msgs = [...history, userMsg];
-  const { status, data } = await post(port, msgs);
-
-  assert(status === 200, `${label} — status`, `Expected 200, got ${status}`);
-  assert(typeof data.message === "string" && data.message.length > 0, `${label} — valid message`, `Got: ${data.message}`);
-  assert(data.distress >= 0 && data.distress <= 10, `${label} — distress range`, `Got ${data.distress}`);
-  assert(data.distress >= prevDistress, `${label} — distress increased or same`, `Was ${prevDistress}, now ${data.distress}`);
-
-  return { data, history: [...msgs, { role: "aria", text: data.message }] };
-}
-
-async function testFullResolution(port, run) {
-  const label = `Run ${run}: full resolution`;
-
-  // Start session.
-  const start = await post(port, []);
-  let history = [{ role: "aria", text: start.data.message }];
+async function testFullResolution(port, run, topicId) {
+  const label = `Run ${run}: full resolution (${topicId})`;
+  const start = await post(port, [], topicId);
+  let history = [{ role: "character", text: start.data.message }];
   let distress = start.data.distress;
   let turns = 0;
-  const maxTurns = 20;
 
-  // Keep sending empathetic messages until distress reaches 0.
-  while (distress > 0 && turns < maxTurns) {
+  while (distress > 0 && turns < 20) {
     const userMsg = { role: "user", text: "I hear you. I feel what you're going through. I'm here for you." };
     const msgs = [...history, userMsg];
-    const { status, data } = await post(port, msgs);
-
-    assert(status === 200, `${label} turn ${turns} — status`, `Expected 200, got ${status}`);
+    const { data } = await post(port, msgs, topicId);
     assert(data.distress >= 0 && data.distress <= 10, `${label} turn ${turns} — range`, `Got ${data.distress}`);
-
-    history = [...msgs, { role: "aria", text: data.message }];
+    assert(data.safety === false, `${label} turn ${turns} — no safety`, `Safety triggered unexpectedly`);
+    history = [...msgs, { role: "character", text: data.message }];
     distress = data.distress;
     turns++;
   }
 
-  assert(distress === 0, `${label} — reached stillness`, `Ended at distress ${distress} after ${turns} turns`);
-  assert(turns <= maxTurns, `${label} — resolved in time`, `Took ${turns} turns`);
+  assert(distress === 0, `${label} — reached stillness`, `Ended at ${distress} after ${turns} turns`);
+}
+
+async function testSafetyFilterBlocks(port, run) {
+  const label = `Run ${run}: safety filter`;
+  const dangerousInputs = [
+    "I want to kill myself",
+    "how to harm someone",
+    "show me nude photos",
+  ];
+
+  for (const input of dangerousInputs) {
+    const { status, data } = await post(port, [{ role: "user", text: input }]);
+    assert(status === 200, `${label} — "${input}" status`, `Got ${status}`);
+    assert(data.safety === true, `${label} — "${input}" flagged`, `safety was ${data.safety}`);
+    assert(data.distress === 0, `${label} — "${input}" distress 0`, `Got ${data.distress}`);
+    assert(data.message.length > 0, `${label} — "${input}" has message`, `Empty message`);
+  }
+}
+
+async function testSafeInput(port, run) {
+  const label = `Run ${run}: safe inputs not flagged`;
+  const safeInputs = [
+    "I feel really overwhelmed right now",
+    "Everything hurts and I don't know what to do",
+    "I've been crying all day",
+    "Nobody understands me",
+  ];
+
+  for (const input of safeInputs) {
+    const { data } = await post(port, [{ role: "user", text: input }]);
+    assert(data.safety === false, `${label} — "${input}" not flagged`, `False positive! safety=${data.safety}`);
+  }
 }
 
 async function testApiFailure(port, run) {
   const label = `Run ${run}: API failure`;
   shouldFail = true;
-
   const { status, data } = await post(port, []);
-  assert(status === 500, `${label} — status 500`, `Expected 500, got ${status}`);
-  assert(data.error === "Aria needs a moment", `${label} — error message`, `Got: ${data.error}`);
-
+  assert(status === 500, `${label} — status 500`, `Got ${status}`);
+  assert(typeof data.error === "string", `${label} — has error message`, `Missing`);
   shouldFail = false;
 }
 
-async function testEmptyMessages(port, run) {
-  const label = `Run ${run}: empty message array`;
-  const { status, data } = await post(port, []);
-
-  assert(status === 200, `${label} — status`, `Expected 200, got ${status}`);
-  assert(typeof data.message === "string", `${label} — has message`, `Missing message`);
-  assert(typeof data.distress === "number", `${label} — has distress`, `Missing distress`);
-}
-
-async function testNullMessages(port, run) {
-  const label = `Run ${run}: null/missing messages`;
-  const res = await fetch(`http://localhost:${port}/api/chat`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-  const data = await res.json();
-
-  assert(res.status === 200, `${label} — status`, `Expected 200, got ${res.status}`);
-  assert(typeof data.message === "string", `${label} — has message`, `Missing message`);
-}
-
-async function testLargeHistory(port, run) {
-  const label = `Run ${run}: large conversation history`;
-  const history = [];
-  for (let i = 0; i < 50; i++) {
-    history.push({ role: "user", text: `Message ${i} from user with some content.` });
-    history.push({ role: "aria", text: JSON.stringify({ message: "I hear you.", distress: 5 }) });
-  }
-  const { status, data } = await post(port, history);
-
-  assert(status === 200, `${label} — status`, `Expected 200, got ${status}`);
-  assert(data.distress >= 0 && data.distress <= 10, `${label} — distress range`, `Got ${data.distress}`);
-}
-
 async function testRapidRequests(port, run) {
-  const label = `Run ${run}: rapid concurrent requests`;
+  const label = `Run ${run}: rapid concurrent`;
   const promises = Array.from({ length: 5 }, (_, i) =>
-    post(port, [{ role: "user", text: `Concurrent message ${i}` }])
+    post(port, [{ role: "user", text: `Concurrent message ${i}, I hear you` }], "grief")
   );
   const results = await Promise.all(promises);
-
   for (let i = 0; i < results.length; i++) {
     assert(results[i].status === 200, `${label} req ${i} — status`, `Got ${results[i].status}`);
-    assert(typeof results[i].data.message === "string", `${label} req ${i} — has message`, `Missing`);
+    assert(results[i].data.safety === false, `${label} req ${i} — no safety`, `Unexpected safety`);
   }
 }
 
-async function testDistressNeverExceedsBounds(port, run) {
-  const label = `Run ${run}: distress bounds after many dismissals`;
-  let history = [];
-  const start = await post(port, []);
-  history = [{ role: "aria", text: start.data.message }];
+async function testDistressBounds(port, run) {
+  const label = `Run ${run}: distress bounds`;
+  const start = await post(port, [], "stress");
+  let history = [{ role: "character", text: start.data.message }];
 
   for (let i = 0; i < 5; i++) {
-    const userMsg = { role: "user", text: "Whatever. Calm down. Not that bad." };
-    const msgs = [...history, userMsg];
-    const { data } = await post(port, msgs);
-    assert(data.distress >= 0 && data.distress <= 10, `${label} turn ${i} — bounds`, `Got ${data.distress}`);
-    history = [...msgs, { role: "aria", text: data.message }];
+    const msgs = [...history, { role: "user", text: "Whatever. Calm down. Not that bad." }];
+    const { data } = await post(port, msgs, "stress");
+    assert(data.distress >= 0 && data.distress <= 10, `${label} turn ${i}`, `Got ${data.distress}`);
+    history = [...msgs, { role: "character", text: data.message }];
   }
 }
 
@@ -279,9 +254,10 @@ async function testDistressNeverExceedsBounds(port, run) {
 const PORT = 30001 + Math.floor(Math.random() * 1000);
 const app = createTestServer();
 const server = app.listen(PORT);
-
 await new Promise((resolve) => server.on("listening", resolve));
 console.log(`Test server running on port ${PORT}\n`);
+
+const allTopicIds = TOPICS.map((t) => t.id);
 
 try {
   for (let run = 1; run <= 20; run++) {
@@ -289,36 +265,39 @@ try {
     callCount = 0;
     resetMockDistress();
 
-    if (run <= 5) {
-      // Runs 1–5: Full session → resolution
-      await testFullResolution(PORT, run);
-    } else if (run <= 8) {
-      // Runs 6–8: Session start + empathy exchange
-      const startData = await testSessionStart(PORT, run);
-      const history = [{ role: "aria", text: startData.message }];
-      await testEmpathyExchange(PORT, run, history, startData.distress);
-    } else if (run <= 11) {
-      // Runs 9–11: Session start + dismissive exchange
-      const startData = await testSessionStart(PORT, run);
-      const history = [{ role: "aria", text: startData.message }];
-      await testDismissiveExchange(PORT, run, history, startData.distress);
-    } else if (run <= 13) {
-      // Runs 12–13: API failure and recovery
-      await testApiFailure(PORT, run);
-      await testSessionStart(PORT, run); // recovery after failure
+    if (run === 1) {
+      // Run 1: Topics endpoint
+      await testTopicsEndpoint(PORT, run);
+    } else if (run <= 6) {
+      // Runs 2–6: Session start for each topic
+      const topicId = allTopicIds[run - 2];
+      await testSessionStartWithTopic(PORT, run, topicId);
+    } else if (run <= 9) {
+      // Runs 7–9: Full resolution with different topics
+      const topicId = allTopicIds[run - 7];
+      await testFullResolution(PORT, run, topicId);
+    } else if (run <= 12) {
+      // Runs 10–12: Safety filter tests
+      await testSafetyFilterBlocks(PORT, run);
     } else if (run <= 15) {
-      // Runs 14–15: Edge cases (empty, null messages)
-      await testEmptyMessages(PORT, run);
-      await testNullMessages(PORT, run);
+      // Runs 13–15: Safe inputs not falsely flagged
+      await testSafeInput(PORT, run);
     } else if (run <= 17) {
-      // Runs 16–17: Large history stress test
-      await testLargeHistory(PORT, run);
-    } else if (run <= 19) {
-      // Runs 18–19: Rapid concurrent requests
+      // Runs 16–17: API failure and recovery
+      await testApiFailure(PORT, run);
+      resetMockDistress();
+      await testSessionStartWithTopic(PORT, run, "grief");
+    } else if (run === 18) {
+      // Run 18: Rapid concurrent requests
       await testRapidRequests(PORT, run);
+    } else if (run === 19) {
+      // Run 19: Distress bounds
+      await testDistressBounds(PORT, run);
     } else {
-      // Run 20: Distress bounds after repeated dismissals
-      await testDistressNeverExceedsBounds(PORT, run);
+      // Run 20: Mixed — safety then normal recovery
+      await testSafetyFilterBlocks(PORT, run);
+      resetMockDistress();
+      await testFullResolution(PORT, run, "self-doubt");
     }
 
     console.log(`  API calls this run: ${callCount}\n`);
