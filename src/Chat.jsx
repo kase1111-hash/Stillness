@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from "react";
 
 const MAX_LENGTH = 1000;
 
-export default function Chat({ messages, loading, phase, onSend, error, onRetry, characterName = "Aria" }) {
+export default function Chat({ messages, loading, phase, onSend, error, onRetry, characterName = "Someone" }) {
   const [input, setInput] = useState("");
   const [warning, setWarning] = useState("");
   const bottomRef = useRef(null);

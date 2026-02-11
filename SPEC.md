@@ -2,11 +2,11 @@
 
 ## Functional Requirements
 
-1. The system shall present a text-based conversation between the user and one of several AI characters (Aria, Eliot, Maya, Jordan, or Sam).
-2. The user can type free-form messages to Aria and submit them.
-3. The system shall generate Aria's responses dynamically using a language model, not from a script.
-4. The system shall maintain a distress level (integer, 0–10) representing Aria's emotional state.
-5. Aria's distress level shall start at a high value (assumption: 8) at the beginning of each session.
+1. The system shall present a text-based conversation between the user and one of several AI characters, each identified by a descriptive archetype (e.g. "The New Graduate", "The Single Parent").
+2. The user can type free-form messages to the selected character and submit them.
+3. The system shall generate the character's responses dynamically using a language model, not from a script.
+4. The system shall maintain a distress level (integer, 0–10) representing the character's emotional state.
+5. The character's distress level shall start at a high value (assumption: 8) at the beginning of each session.
 6. The system shall decrease the character's distress when the user demonstrates empathy, validation, present-moment grounding, or gentle warmth.
 7. The system shall increase or stagnate distress when the user is dismissive, cold, or purely logical without empathy.
 8. The system shall update the visual environment in real time to reflect the current distress level — a therapist-office scene with weather, lighting, and atmosphere that shift continuously.
@@ -27,7 +27,7 @@
 
 - **Platform:** Web application (assumption: the README describes visual environments, implying a browser context).
 - **Structure:** Multi-file project — at minimum, separate files for UI, conversation logic, and visual environment.
-- **Dependencies:** A language model API is required for response generation. No specific provider is chosen here.
+- **LLM providers:** Anthropic Claude (default) and Ollama (offline) are both supported. Set `LLM_PROVIDER=ollama` to use a local model.
 - **Performance:** Environment transitions must feel smooth — visual updates should occur within 200ms of receiving a new distress value.
 - **Data storage:** None. Sessions are ephemeral. No conversations are saved between sessions.
 
@@ -35,9 +35,10 @@
 
 - **Empty input:** The system shall not send empty or whitespace-only messages. Display a gentle prompt to try again.
 - **Very long input:** The system shall truncate or reject messages over 1000 characters.
-- **API failure:** If the language model is unreachable, display a message like "Aria needs a moment" and allow retry.
-- **Rapid input:** The system shall disable the input field while Aria is responding to prevent overlapping requests.
+- **API failure:** If the language model is unreachable, display a message like "[character name] needs a moment" and allow retry.
+- **Rapid input:** The system shall disable the input field while the character is responding to prevent overlapping requests.
 - **Session interrupted:** No recovery needed — the user simply starts a new session.
+- **LLM timeout:** If the language model does not respond within 30 seconds, the request is aborted and treated as an API failure.
 
 ## Out of Scope
 

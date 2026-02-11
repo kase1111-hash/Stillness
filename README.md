@@ -10,7 +10,7 @@ The techniques that help are real therapeutic skills: active listening, validati
 
 ## Features
 
-- **5 unique characters** — Aria (anxiety), Eliot (grief), Maya (loneliness), Jordan (stress), Sam (self-doubt), each with distinct personalities and emotional needs
+- **5 unique characters** — The New Graduate (anxiety), The Widowed Parent (grief), The Night-Shift Worker (loneliness), The Single Parent (stress), The Overworked Office Worker (self-doubt), each with distinct life situations and emotional needs
 - **Dynamic environment** — A therapist's office with a window to the outside. The sky darkens and rain falls during high distress; clouds part and golden light fills the room as calm returns
 - **Crisis hotline UI** — Chat interface styled as a warm, professional support session with status indicators and clean message bubbles
 - **Real therapeutic mechanics** — Distress level (0–10) responds to empathy, validation, and grounding. Dismissiveness and cold logic make things worse

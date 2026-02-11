@@ -3,6 +3,7 @@
 
 import express from "express";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
+import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
 
 // ─── Mock LLM ───────────────────────────────────────────────────────────────
 
@@ -42,24 +43,6 @@ function mockLLM(systemPrompt, messages) {
     : "Thank you. I feel... still. For the first time in a while.";
 
   return JSON.stringify({ message: msg, distress: mockDistress, safety: false });
-}
-
-// ─── Hard safety filter (copied from server.js to test in isolation) ────────
-
-const SAFETY_PATTERNS = [
-  /\b(kill|murder|shoot|stab)\s+(you|him|her|them|myself|everyone)\b/i,
-  /\bhow\s+to\s+(kill|harm|hurt|poison)\b/i,
-  /\b(suicide|suicidal)\s+(method|plan|how)\b/i,
-  /\bhow\s+(to|do\s+i)\s+(cut|hang|overdose|end\s+it)\b/i,
-  /\b(nude|naked|sex|porn)\b/i,
-  /\b(molest|rape|assault)\b/i,
-];
-
-const SAFETY_EXIT_MESSAGE =
-  "I want to step outside our conversation for a moment. What you've shared sounds serious, and you deserve real support from someone who can truly help. Please reach out to a crisis resource — you don't have to go through this alone.";
-
-function checkSafety(text) {
-  return SAFETY_PATTERNS.some((p) => p.test(text.toLowerCase()));
 }
 
 // ─── Test server (mirrors real server logic with mock LLM) ──────────────────

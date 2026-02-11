@@ -1,5 +1,13 @@
 # Changelog
 
+## Quality Evaluation Fixes
+
+- **Characters renamed**: Replaced abstract names (Aria, Eliot, Maya, Jordan, Sam) with descriptive therapy archetypes (The New Graduate, The Widowed Parent, The Night-Shift Worker, The Single Parent, The Overworked Office Worker). Each character now has specific life-situation details in their prompt.
+- **Safety filter expanded**: Added patterns for suicide planning phrases, self-harm instructions, child exploitation, drug manufacturing, and weapons creation. Extracted to shared module (`src/safety.js`) imported by both `server.js` and `test-e2e.js`.
+- **LLM timeout**: Added 30-second timeout to both Anthropic (via SDK `timeout` option) and Ollama (via `AbortSignal.timeout`) calls in `server.js`.
+- **SPEC.md updated**: Replaced all "Aria" references with generic "character" language. Marked Ollama as a supported LLM provider. Added LLM timeout edge case.
+- **Documentation sync**: Updated README, ARCHITECTURE.md, and CHANGELOG.md to reflect new character names, shared safety module, file count (13), and timeout behavior.
+
 ## GUI Redesign — Crisis Hotline / Therapist Office
 
 - **Environment**: Replaced gradient/orb/particle visuals with a therapist-office scene. Warm room background with a 4-pane window showing dynamic weather (stormy sky + rain at high distress, golden clearing at calm), drifting clouds, amber desk lamp glow, and a potted plant silhouette
@@ -9,7 +17,7 @@
 
 ## Multi-Topic Therapy System
 
-- **5 characters**: Aria (anxiety), Eliot (grief), Maya (loneliness), Jordan (stress), Sam (self-doubt), each with unique personality prompts
+- **5 characters**: Each identified by a descriptive life-situation archetype, with unique personality prompts
 - **Topic selection**: New phase between landing and active session with a grid of character cards
 - **Per-topic routing**: Server accepts `topic` parameter, loads character-specific system prompt
 - **Safety**: Two-layer safety system (hard regex filter + LLM soft safety) with crisis resource display on safety exit

@@ -35,11 +35,11 @@ export default function App() {
       .catch(() => {
         // Fallback — hardcoded topic list if server isn't up yet.
         setTopics([
-          { id: "anxiety", character: "Aria", name: "Anxiety", description: "Overwhelmed by worry and fear." },
-          { id: "grief", character: "Eliot", name: "Grief", description: "Processing loss." },
-          { id: "loneliness", character: "Maya", name: "Loneliness", description: "Feeling isolated." },
-          { id: "stress", character: "Jordan", name: "Stress", description: "Crushed under pressure." },
-          { id: "self-doubt", character: "Sam", name: "Self-Doubt", description: "Feeling not good enough." },
+          { id: "anxiety", character: "The New Graduate", name: "Anxiety", description: "Terrified of the future after finishing school." },
+          { id: "grief", character: "The Widowed Parent", name: "Grief", description: "Lost a partner, raising kids alone." },
+          { id: "loneliness", character: "The Night-Shift Worker", name: "Loneliness", description: "Drifting further from connection every day." },
+          { id: "stress", character: "The Single Parent", name: "Stress", description: "Juggling everything with no help." },
+          { id: "self-doubt", character: "The Overworked Office Worker", name: "Self-Doubt", description: "Passed over again, questioning everything." },
         ]);
       });
   }, []);
@@ -228,7 +228,7 @@ export default function App() {
         onSend={handleSend}
         error={error}
         onRetry={handleRetry}
-        characterName={topic?.character || "Aria"}
+        characterName={topic?.character || "Someone"}
       />
       <button onClick={handleBackToTopics} style={styles.restartBtn}>
         Start over
