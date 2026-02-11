@@ -7,7 +7,7 @@
 | Language | JavaScript (ES modules) | Runs natively in the browser. No compilation required for simple projects. Satisfies platform constraint (web). |
 | UI framework | React 19 via npm | Component model fits the three distinct UI regions (chat, environment, landing). Handles re-renders on state change efficiently (reqs 1, 8). |
 | Build tool | Vite | Fast dev server, zero-config React support, single command to build for production. |
-| LLM provider | Anthropic Claude API (Sonnet) | Strong instruction-following for structured JSON output (reqs 3, 6, 7). Called from a lightweight backend proxy to keep API keys off the client. |
+| LLM provider | Anthropic Claude (default) or Ollama (offline) | Set `LLM_PROVIDER=ollama` to use a local model via Ollama's `/api/chat` endpoint with `format: "json"`. Anthropic is the default for strongest instruction-following (reqs 3, 6, 7). Both are called from the Express proxy. |
 | Backend proxy | Express (single route) | Needed solely to keep the API key server-side. One POST endpoint, no database (storage constraint). |
 | Visual environment | CSS custom properties + CSS transitions | Smooth interpolation of colors and motion within the 200ms performance constraint (req 8). No canvas or WebGL needed — the environment is atmospheric, not rendered. |
 | Particles | CSS keyframe animations on span elements | Lightweight, GPU-accelerated, no library needed. Particle count and speed driven by distress value. |
@@ -16,7 +16,7 @@
 
 | File | Purpose | Reqs |
 |------|---------|------|
-| `server.js` | Express proxy — single POST `/api/chat` route that forwards to Claude API | 3, 6, 7, edge:api-failure |
+| `server.js` | Express proxy — single POST `/api/chat` route that forwards to Anthropic or Ollama based on `LLM_PROVIDER` env var | 3, 6, 7, edge:api-failure |
 | `src/main.jsx` | React entry point, mounts App | — |
 | `src/App.jsx` | Top-level layout, holds all session state, orchestrates phase transitions | 1, 4, 5, 9, 10 |
 | `src/Chat.jsx` | Message list + input field, input validation, loading state | 1, 2, edge:empty, edge:long, edge:rapid |

@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "server": "node server.js",
-    "start": "concurrently \"npm run server\" \"npm run dev\""
+    "server:ollama": "LLM_PROVIDER=ollama node server.js",
+    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "start:ollama": "concurrently \"npm run server:ollama\" \"npm run dev\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
