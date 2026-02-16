@@ -84,12 +84,22 @@ async function callLLM(systemPrompt, messages) {
   return callAnthropic(systemPrompt, messages);
 }
 
+// Extracts JSON from an LLM response that may be wrapped in markdown code fences.
+function extractJSON(text) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) return fenced[1].trim();
+  return text.trim();
+}
+
 // Parses the LLM's JSON response and clamps distress to 0–10.
 function parseResponse(text) {
-  const parsed = JSON.parse(text);
+  const cleaned = extractJSON(text);
+  const parsed = JSON.parse(cleaned);
+  const msg = parsed.message ?? parsed.response ?? parsed.text;
+  const dist = Number(parsed.distress);
   return {
-    message: String(parsed.message),
-    distress: Math.max(0, Math.min(10, Math.round(Number(parsed.distress)))),
+    message: typeof msg === "string" && msg.length > 0 ? msg : "...",
+    distress: Number.isFinite(dist) ? Math.max(0, Math.min(10, Math.round(dist))) : 8,
     safety: parsed.safety === true,
   };
 }

@@ -2,7 +2,7 @@
 // topic selection, safety exits, and wires Chat + Environment together.
 // Styled with a warm therapist-office / crisis-hotline aesthetic.
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Chat from "./Chat.jsx";
 import Environment from "./Environment.jsx";
 import { sendMessage, fetchTopics } from "./api.js";
@@ -27,6 +27,7 @@ export default function App() {
   const [topic, setTopic] = useState(null);       // selected topic object
   const [topics, setTopics] = useState([]);        // all available topics
   const [safetyMsg, setSafetyMsg] = useState("");  // message shown on safety exit
+  const abortRef = useRef(null);                   // cancels in-flight API requests
 
   // Load topics from the server on mount.
   useEffect(() => {
@@ -45,11 +46,18 @@ export default function App() {
   }, []);
 
   // Calls the API with the given message history and handles the response.
+  // Aborts any in-flight request first to prevent stale responses from overwriting state.
   async function callCharacter(msgs, currentTopic) {
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
     setError(false);
     try {
-      const { message, distress: newDistress, safety } = await sendMessage(msgs, currentTopic.id);
+      const { message, distress: newDistress, safety } = await sendMessage(msgs, currentTopic.id, controller.signal);
+
+      if (controller.signal.aborted) return;
 
       if (safety) {
         // Safety triggered — show safety exit with the LLM's/filter's message.
@@ -68,7 +76,8 @@ export default function App() {
       if (newDistress === 0) {
         setPhase("resolved");
       }
-    } catch {
+    } catch (err) {
+      if (err.name === "AbortError") return;
       setError(true);
     } finally {
       setLoading(false);

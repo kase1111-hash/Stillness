@@ -75,10 +75,15 @@ function createTestServer() {
         : [{ role: "user", content: "(session start)" }];
 
       const text = mockLLM(systemPrompt, llmMessages);
-      const parsed = JSON.parse(text);
+      // Extract JSON from possible markdown code fences (mirrors server logic).
+      const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const cleaned = fenced ? fenced[1].trim() : text.trim();
+      const parsed = JSON.parse(cleaned);
+      const msg = parsed.message ?? parsed.response ?? parsed.text;
+      const dist = Number(parsed.distress);
       const result = {
-        message: String(parsed.message),
-        distress: Math.max(0, Math.min(10, Math.round(Number(parsed.distress)))),
+        message: typeof msg === "string" && msg.length > 0 ? msg : "...",
+        distress: Number.isFinite(dist) ? Math.max(0, Math.min(10, Math.round(dist))) : 8,
         safety: parsed.safety === true,
       };
 
