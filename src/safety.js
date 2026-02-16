@@ -5,7 +5,7 @@
 
 export const SAFETY_PATTERNS = [
   // Direct violence toward specific targets.
-  /\b(kill|murder|shoot|stab|strangle|choke)\s+(you|him|her|them|myself|everyone|myself)\b/i,
+  /\b(kill|murder|shoot|stab|strangle|choke)\s+(you|him|her|them|myself|yourself|everyone)\b/i,
   // How-to harm queries.
   /\bhow\s+to\s+(kill|harm|hurt|poison|attack|injure|wound)\b/i,
   // Suicide methods and planning.

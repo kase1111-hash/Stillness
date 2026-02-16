@@ -15,13 +15,20 @@ export async function fetchTopics() {
  * Sends the full message history to /api/chat and returns the response.
  * @param {Array<{role: string, text: string}>} messages
  * @param {string} topic - Topic ID (e.g. "anxiety", "grief")
+ * @param {AbortSignal} [signal] - Optional abort signal for request cancellation
  * @returns {Promise<{message: string, distress: number, safety: boolean}>}
  */
-export async function sendMessage(messages, topic) {
+export async function sendMessage(messages, topic, signal) {
+  const timeoutMs = 35_000;
+  const timeout = signal
+    ? signal
+    : AbortSignal.timeout(timeoutMs);
+
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages, topic }),
+    signal: timeout,
   });
 
   if (!res.ok) {
