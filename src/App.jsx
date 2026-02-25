@@ -154,7 +154,7 @@ export default function App() {
           <p style={{ ...styles.subtitle, marginBottom: "20px" }}>
             Each person is going through something different. Your role is to listen.
           </p>
-          <div style={styles.topicGrid}>
+          <div className="topic-grid" style={styles.topicGrid}>
             {topics.map((t) => (
               <button
                 key={t.id}

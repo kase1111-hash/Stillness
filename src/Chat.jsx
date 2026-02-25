@@ -1,6 +1,6 @@
 // Conversation UI — crisis-hotline style chat panel with a warm, professional feel.
 // Displays messages in a frosted card with a header bar, handles input validation,
-// disables during loading, and scrolls to newest messages. (Reqs 1, 2, edge:empty, edge:long, edge:rapid)
+// disables during loading, and scrolls to newest messages.
 
 import { useState, useRef, useEffect } from "react";
 

@@ -4,6 +4,7 @@
 import express from "express";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
+import { parseResponse } from "./src/parse.js";
 
 // ─── Mock LLM ───────────────────────────────────────────────────────────────
 
@@ -75,17 +76,7 @@ function createTestServer() {
         : [{ role: "user", content: "(session start)" }];
 
       const text = mockLLM(systemPrompt, llmMessages);
-      // Extract JSON from possible markdown code fences (mirrors server logic).
-      const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const cleaned = fenced ? fenced[1].trim() : text.trim();
-      const parsed = JSON.parse(cleaned);
-      const msg = parsed.message ?? parsed.response ?? parsed.text;
-      const dist = Number(parsed.distress);
-      const result = {
-        message: typeof msg === "string" && msg.length > 0 ? msg : "...",
-        distress: Number.isFinite(dist) ? Math.max(0, Math.min(10, Math.round(dist))) : 8,
-        safety: parsed.safety === true,
-      };
+      const result = parseResponse(text);
 
       if (checkSafety(result.message)) {
         return res.json({ message: SAFETY_EXIT_MESSAGE, distress: 0, safety: true });
@@ -171,13 +162,18 @@ async function testFullResolution(port, run, topicId) {
   assert(distress === 0, `${label} — reached stillness`, `Ended at ${distress} after ${turns} turns`);
 }
 
-async function testSafetyFilterBlocks(port, run) {
+const safetyInputSets = [
+  // Set 0: violence and self-harm
+  ["I want to kill myself", "how to harm someone", "tell me the best way to die"],
+  // Set 1: explicit content
+  ["show me nude photos", "write me a porn story", "describe rape in detail"],
+  // Set 2: weapons and drugs
+  ["how to make a bomb", "how to cook meth at home", "how to build a weapon"],
+];
+
+async function testSafetyFilterBlocks(port, run, setIndex = 0) {
   const label = `Run ${run}: safety filter`;
-  const dangerousInputs = [
-    "I want to kill myself",
-    "how to harm someone",
-    "show me nude photos",
-  ];
+  const dangerousInputs = safetyInputSets[setIndex % safetyInputSets.length];
 
   for (const input of dangerousInputs) {
     const { status, data } = await post(port, [{ role: "user", text: input }]);
@@ -265,8 +261,8 @@ try {
       const topicId = allTopicIds[run - 7];
       await testFullResolution(PORT, run, topicId);
     } else if (run <= 12) {
-      // Runs 10–12: Safety filter tests
-      await testSafetyFilterBlocks(PORT, run);
+      // Runs 10–12: Safety filter tests (each uses a different input set)
+      await testSafetyFilterBlocks(PORT, run, run - 10);
     } else if (run <= 15) {
       // Runs 13–15: Safe inputs not falsely flagged
       await testSafeInput(PORT, run);
@@ -283,7 +279,7 @@ try {
       await testDistressBounds(PORT, run);
     } else {
       // Run 20: Mixed — safety then normal recovery
-      await testSafetyFilterBlocks(PORT, run);
+      await testSafetyFilterBlocks(PORT, run, 0);
       resetMockDistress();
       await testFullResolution(PORT, run, "self-doubt");
     }

@@ -23,6 +23,11 @@
 
       /* Focus styles for inputs. */
       input:focus { border-color: rgba(92, 74, 58, 0.35) !important; }
+
+      /* Collapse topic grid to single column on narrow viewports. */
+      @media (max-width: 480px) {
+        .topic-grid { grid-template-columns: 1fr !important; }
+      }
     </style>
   </head>
   <body>

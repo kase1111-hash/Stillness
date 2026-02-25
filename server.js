@@ -2,12 +2,14 @@
 // history to the configured LLM and returns a structured response.
 // Includes a hard safety filter on user input and LLM output.
 // Supports Anthropic Claude (default) and Ollama for offline use.
+// TODO: Add authentication if deployed beyond localhost.
 
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
+import { parseResponse } from "./src/parse.js";
 
 const app = express();
 app.use(express.json({ limit: "10kb" }));
@@ -106,26 +108,6 @@ async function callLLM(systemPrompt, messages) {
   return callAnthropic(systemPrompt, messages);
 }
 
-// Extracts JSON from an LLM response that may be wrapped in markdown code fences.
-function extractJSON(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-  return text.trim();
-}
-
-// Parses the LLM's JSON response and clamps distress to 0–10.
-function parseResponse(text) {
-  const cleaned = extractJSON(text);
-  const parsed = JSON.parse(cleaned);
-  const msg = parsed.message ?? parsed.response ?? parsed.text;
-  const dist = Number(parsed.distress);
-  return {
-    message: typeof msg === "string" && msg.length > 0 ? msg : "...",
-    distress: Number.isFinite(dist) ? Math.max(0, Math.min(10, Math.round(dist))) : 8,
-    safety: parsed.safety === true,
-  };
-}
-
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 app.get("/health", (_req, res) => {
@@ -143,6 +125,10 @@ app.get("/api/topics", (_req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages, topic } = req.body;
+    if (!topic || typeof topic !== "string") {
+      return res.status(400).json({ error: "Missing topic" });
+    }
+
     const formatted = formatMessages(messages || []);
 
     // Hard safety check on the latest user message.
@@ -155,12 +141,21 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const systemPrompt = getSystemPrompt(topic || "anxiety");
+    const systemPrompt = getSystemPrompt(topic);
     const llmMessages = formatted.length > 0
       ? formatted
       : [{ role: "user", content: "(session start)" }];
 
-    const text = await callLLM(systemPrompt, llmMessages);
+    let text;
+    try {
+      const llmStart = Date.now();
+      text = await callLLM(systemPrompt, llmMessages);
+      console.log(`LLM call: ${LLM_PROVIDER} ${Date.now() - llmStart}ms topic=${topic}`);
+    } catch (llmErr) {
+      console.error("LLM error:", llmErr.message);
+      return res.status(502).json({ error: "They need a moment" });
+    }
+
     const result = parseResponse(text);
 
     // Safety check on LLM output.
@@ -174,8 +169,8 @@ app.post("/api/chat", async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error("API error:", err.message);
-    res.status(500).json({ error: "They need a moment" });
+    console.error("Server error:", err.message);
+    res.status(500).json({ error: "Something went wrong" });
   }
 });
 

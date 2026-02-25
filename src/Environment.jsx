@@ -1,7 +1,7 @@
 // Full-screen visual environment — therapist office with a window to the outside.
 // The window scene (sky, clouds, rain) and interior lighting all shift based on the
 // distress prop (0–10). High distress = dark storm, dim lamp. Calm = golden sky, warm glow.
-// CSS transitions handle smooth interpolation within the 200ms performance constraint. (Req 8)
+// CSS transitions handle smooth interpolation.
 
 import { useMemo } from "react";
 
