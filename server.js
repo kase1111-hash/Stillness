@@ -8,6 +8,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
+import { parseResponse } from "./src/parse.js";
 
 const app = express();
 app.use(express.json({ limit: "10kb" }));
@@ -104,26 +105,6 @@ async function callLLM(systemPrompt, messages) {
     return callOllama(systemPrompt, messages);
   }
   return callAnthropic(systemPrompt, messages);
-}
-
-// Extracts JSON from an LLM response that may be wrapped in markdown code fences.
-function extractJSON(text) {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-  return text.trim();
-}
-
-// Parses the LLM's JSON response and clamps distress to 0–10.
-function parseResponse(text) {
-  const cleaned = extractJSON(text);
-  const parsed = JSON.parse(cleaned);
-  const msg = parsed.message ?? parsed.response ?? parsed.text;
-  const dist = Number(parsed.distress);
-  return {
-    message: typeof msg === "string" && msg.length > 0 ? msg : "...",
-    distress: Number.isFinite(dist) ? Math.max(0, Math.min(10, Math.round(dist))) : 8,
-    safety: parsed.safety === true,
-  };
 }
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
