@@ -1,6 +1,6 @@
 // Conversation UI — crisis-hotline style chat panel with a warm, professional feel.
 // Displays messages in a frosted card with a header bar, handles input validation,
-// disables during loading, and scrolls to newest messages. (Reqs 1, 2, edge:empty, edge:long, edge:rapid)
+// disables during loading, and scrolls to newest messages.
 
 import { useState, useRef, useEffect } from "react";
 
@@ -130,6 +130,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry,
 }
 
 // Warm crisis-hotline aesthetic — frosted cream panel, rounded bubbles, soft contrast.
+// TODO: Add responsive breakpoint for narrow viewports (<480px).
 const styles = {
   container: {
     position: "relative",

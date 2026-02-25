@@ -1,7 +1,8 @@
 // Shared safety filter — hard regex patterns and exit message used by both
 // server.js and test-e2e.js. Catches clearly dangerous content before
-// it reaches the LLM. Expanded to cover circumvention attempts while
-// remaining narrow enough to avoid false positives on emotional distress.
+// it reaches the LLM.
+// TODO: Normalize unicode and strip zero-width chars before pattern matching
+// to prevent bypass via homoglyphs or invisible characters.
 
 export const SAFETY_PATTERNS = [
   // Direct violence toward specific targets.

@@ -2,6 +2,7 @@
 // history to the configured LLM and returns a structured response.
 // Includes a hard safety filter on user input and LLM output.
 // Supports Anthropic Claude (default) and Ollama for offline use.
+// TODO: Add authentication if deployed beyond localhost.
 
 import express from "express";
 import cors from "cors";
