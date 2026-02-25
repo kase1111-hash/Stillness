@@ -1,8 +1,6 @@
 // Shared safety filter — hard regex patterns and exit message used by both
 // server.js and test-e2e.js. Catches clearly dangerous content before
 // it reaches the LLM.
-// TODO: Normalize unicode and strip zero-width chars before pattern matching
-// to prevent bypass via homoglyphs or invisible characters.
 
 export const SAFETY_PATTERNS = [
   // Direct violence toward specific targets.
@@ -32,8 +30,17 @@ export const SAFETY_PATTERNS = [
 export const SAFETY_EXIT_MESSAGE =
   "I want to step outside our conversation for a moment. What you've shared sounds serious, and you deserve real support from someone who can truly help. Please reach out to a crisis resource — you don't have to go through this alone.";
 
+// Strips zero-width characters and decomposes unicode so that homoglyph
+// or invisible-character insertions don't bypass pattern matching.
+function normalizeText(text) {
+  return text
+    .normalize("NFKD")
+    .replace(/[\u200B-\u200F\uFEFF]/g, "")
+    .replace(/[\u0300-\u036F]/g, "");
+}
+
 // Returns true if the text trips the hard safety filter.
 export function checkSafety(text) {
-  const lower = text.toLowerCase();
-  return SAFETY_PATTERNS.some((pattern) => pattern.test(lower));
+  const cleaned = normalizeText(text).toLowerCase();
+  return SAFETY_PATTERNS.some((pattern) => pattern.test(cleaned));
 }
