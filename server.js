@@ -143,6 +143,10 @@ app.get("/api/topics", (_req, res) => {
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages, topic } = req.body;
+    if (!topic || typeof topic !== "string") {
+      return res.status(400).json({ error: "Missing topic" });
+    }
+
     const formatted = formatMessages(messages || []);
 
     // Hard safety check on the latest user message.
@@ -155,12 +159,21 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
-    const systemPrompt = getSystemPrompt(topic || "anxiety");
+    const systemPrompt = getSystemPrompt(topic);
     const llmMessages = formatted.length > 0
       ? formatted
       : [{ role: "user", content: "(session start)" }];
 
-    const text = await callLLM(systemPrompt, llmMessages);
+    let text;
+    try {
+      const llmStart = Date.now();
+      text = await callLLM(systemPrompt, llmMessages);
+      console.log(`LLM call: ${LLM_PROVIDER} ${Date.now() - llmStart}ms topic=${topic}`);
+    } catch (llmErr) {
+      console.error("LLM error:", llmErr.message);
+      return res.status(502).json({ error: "They need a moment" });
+    }
+
     const result = parseResponse(text);
 
     // Safety check on LLM output.
@@ -174,8 +187,8 @@ app.post("/api/chat", async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error("API error:", err.message);
-    res.status(500).json({ error: "They need a moment" });
+    console.error("Server error:", err.message);
+    res.status(500).json({ error: "Something went wrong" });
   }
 });
 
