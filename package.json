@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "cors": "^2.8.6",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.2.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

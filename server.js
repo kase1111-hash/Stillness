@@ -4,11 +4,33 @@
 // Supports Anthropic Claude (default) and Ollama for offline use.
 
 import express from "express";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
 import { getSystemPrompt, TOPICS } from "./src/prompt.js";
 import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "10kb" }));
+app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
+
+// Log every request with method, path, status, and duration.
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+  });
+  next();
+});
+
+// Rate-limit chat endpoint to prevent LLM cost flooding.
+const chatLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Please slow down — too many messages." },
+});
+app.use("/api/chat", chatLimiter);
 
 // LLM provider config.
 const LLM_PROVIDER = process.env.LLM_PROVIDER || "anthropic";
@@ -105,6 +127,10 @@ function parseResponse(text) {
 }
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
+
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", provider: LLM_PROVIDER });
+});
 
 // Serves the topic list to the client.
 app.get("/api/topics", (_req, res) => {
