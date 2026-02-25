@@ -48,7 +48,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry,
         </div>
 
         {/* Message list */}
-        <div style={styles.messages}>
+        <div style={styles.messages} role="log" aria-live="polite" aria-label="Conversation">
           {messages.map((msg, i) => (
             <div
               key={i}
@@ -74,7 +74,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry,
 
           {/* Typing indicator */}
           {loading && (
-            <div style={{ ...styles.bubble, ...styles.charBubble }}>
+            <div style={{ ...styles.bubble, ...styles.charBubble }} role="status" aria-label={`${characterName} is typing`}>
               <span style={{ ...styles.role, ...styles.charRole }}>{characterName}</span>
               <p style={{ ...styles.text, ...styles.charText, opacity: 0.45 }}>
                 typing...
@@ -104,6 +104,7 @@ export default function Chat({ messages, loading, phase, onSend, error, onRetry,
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={disabled ? "" : "Say something..."}
+              aria-label="Type your message"
               disabled={disabled}
               maxLength={MAX_LENGTH + 1}
               style={{

@@ -2,7 +2,7 @@
 // topic selection, safety exits, and wires Chat + Environment together.
 // Styled with a warm therapist-office / crisis-hotline aesthetic.
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Chat from "./Chat.jsx";
 import Environment from "./Environment.jsx";
 import { sendMessage, fetchTopics } from "./api.js";
@@ -31,18 +31,22 @@ export default function App() {
 
   // Load topics from the server on mount.
   useEffect(() => {
+    let active = true;
     fetchTopics()
-      .then(setTopics)
+      .then((data) => { if (active) setTopics(data); })
       .catch(() => {
         // Fallback — hardcoded topic list if server isn't up yet.
-        setTopics([
-          { id: "anxiety", character: "The New Graduate", name: "Anxiety", description: "Terrified of the future after finishing school." },
-          { id: "grief", character: "The Widowed Parent", name: "Grief", description: "Lost a partner, raising kids alone." },
-          { id: "loneliness", character: "The Night-Shift Worker", name: "Loneliness", description: "Drifting further from connection every day." },
-          { id: "stress", character: "The Single Parent", name: "Stress", description: "Juggling everything with no help." },
-          { id: "self-doubt", character: "The Overworked Office Worker", name: "Self-Doubt", description: "Passed over again, questioning everything." },
-        ]);
+        if (active) {
+          setTopics([
+            { id: "anxiety", character: "The New Graduate", name: "Anxiety", description: "Terrified of the future after finishing school." },
+            { id: "grief", character: "The Widowed Parent", name: "Grief", description: "Lost a partner, raising kids alone." },
+            { id: "loneliness", character: "The Night-Shift Worker", name: "Loneliness", description: "Drifting further from connection every day." },
+            { id: "stress", character: "The Single Parent", name: "Stress", description: "Juggling everything with no help." },
+            { id: "self-doubt", character: "The Overworked Office Worker", name: "Self-Doubt", description: "Passed over again, questioning everything." },
+          ]);
+        }
       });
+    return () => { active = false; };
   }, []);
 
   // Calls the API with the given message history and handles the response.
@@ -84,13 +88,11 @@ export default function App() {
     }
   }
 
-  // Shows topic selection.
-  const handleBeginTopics = useCallback(() => {
+  function handleBeginTopics() {
     setPhase("topics");
-  }, []);
+  }
 
-  // Starts a session with the selected topic.
-  const handleSelectTopic = useCallback((selectedTopic) => {
+  function handleSelectTopic(selectedTopic) {
     setTopic(selectedTopic);
     setPhase("active");
     setDistress(INITIAL_DISTRESS);
@@ -98,33 +100,27 @@ export default function App() {
     setError(false);
     setSafetyMsg("");
     callCharacter([], selectedTopic);
-  }, []);
+  }
 
-  // Handles a validated user message from Chat.
-  const handleSend = useCallback(
-    (text) => {
-      const userMsg = { role: "user", text };
-      const updated = [...messages, userMsg];
-      setMessages(updated);
-      callCharacter(updated, topic);
-    },
-    [messages, topic],
-  );
+  function handleSend(text) {
+    const userMsg = { role: "user", text };
+    const updated = [...messages, userMsg];
+    setMessages(updated);
+    callCharacter(updated, topic);
+  }
 
-  // Retries the last API call after a failure.
-  const handleRetry = useCallback(() => {
+  function handleRetry() {
     callCharacter(messages, topic);
-  }, [messages, topic]);
+  }
 
-  // Returns to topic selection (used by resolved + safety screens).
-  const handleBackToTopics = useCallback(() => {
+  function handleBackToTopics() {
     setPhase("topics");
     setMessages([]);
     setDistress(INITIAL_DISTRESS);
     setError(false);
     setTopic(null);
     setSafetyMsg("");
-  }, []);
+  }
 
   // ─── Landing ──────────────────────────────────────────────────────────────
 
