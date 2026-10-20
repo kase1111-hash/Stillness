@@ -35,10 +35,13 @@ You MUST respond with valid JSON only. No text before or after the JSON object.
   "safety": <boolean, true ONLY if safety rules were triggered, otherwise false>
 }`;
 
+// Distress level every session starts at.
+export const INITIAL_DISTRESS = 8;
+
 // Shared distress mechanics.
 const DISTRESS_RULES = `
 ## Distress level
-You maintain an internal distress level (integer, 0–10). It starts at 8.
+You maintain an internal distress level (integer, 0–10). It starts at ${INITIAL_DISTRESS}.
 
 ### What DECREASES distress (by 1–2 points):
 - Empathetic statements ("That sounds really hard")
@@ -57,7 +60,7 @@ You maintain an internal distress level (integer, 0–10). It starts at 8.
 ### Rules:
 - Distress can never go below 0 or above 10
 - Changes should be gradual — no jumping more than 2 points per exchange
-- If the user's first message in a session is empty (conversation just started), introduce yourself at distress level 8`;
+- If the user's first message in a session is empty (conversation just started), introduce yourself at distress level ${INITIAL_DISTRESS}`;
 
 // All available therapy topics.
 // Characters are named by their life situation — descriptive, not reductionist.

@@ -24,12 +24,12 @@
 | `src/Environment.jsx` | Full-screen background — therapist office with window (sky, clouds, rain), lamp glow, plant silhouette — all driven by distress prop | 8 |
 | `src/api.js` | `fetchTopics()` + `sendMessage(messages, topic)` → calls proxy → returns `{ message, distress, safety }` | 3, 6, 7, edge:api-failure |
 | `src/prompt.js` | Topic definitions (5 characters with descriptive archetypes), per-topic system prompts, shared distress/safety/output rules | 3, 6, 7 |
-| `src/safety.js` | Shared safety filter — expanded regex patterns, exit message, `checkSafety()` function. Imported by `server.js` and `test-e2e.js` | — |
+| `src/safety.js` | Shared safety filter — expanded regex patterns, exit message, `checkSafety()` function. Imported by `server.js` | — |
 | `index.html` | Shell HTML | — |
 | `package.json` | Project metadata, dependencies, and npm scripts | — |
 | `vite.config.js` | Vite config — React plugin, dev server proxy from `/api` to Express | — |
 | `.gitignore` | Excludes `node_modules/` and `dist/` from version control | — |
-| `test-e2e.js` | E2E test suite — mock LLM, shared safety filter, topic routing, 20 test runs | — |
+| `test-e2e.js` | E2E test suite — starts the real `server.js` against a mock Anthropic API that enforces the API's request rules; topic routing, safety, distress rules, 24 test runs | — |
 
 **13 files total.** Every numbered requirement (1–10) and every edge case appears in at least one file's responsibility list.
 
@@ -37,7 +37,7 @@
 
 **Topic** — A conversation scenario. Fields: `id` (string slug), `character` (display name), `name` (topic label), `description` (short summary), `prompt` (character-specific system prompt text).
 
-**Message** — A single conversational turn. Fields: `role` (either "user" or "character"), `text` (string).
+**Message** — A single conversational turn. Fields: `role` (either "user" or "character"), `text` (string), `distress` (character turns only — the level after that reply, replayed to the LLM so it can track distress across turns).
 
 **Session** — The full state of one playthrough. Fields: `messages` (ordered list of Messages), `distress` (integer 0–10), `phase` (one of "landing", "topics", "active", "resolved", "safety"), `loading` (boolean), `error` (boolean), `topic` (selected Topic object), `safetyMsg` (string shown on safety exit).
 
@@ -62,23 +62,23 @@
 
 **api.fetchTopics** — Loads available topics. Produces: array of `{ id, character, name, description }`. Talks to: server.js GET `/api/topics`.
 
-**api.sendMessage** — Handles LLM communication. Receives: full message history, topic ID. Produces: `{ message, distress, safety }` or throws on failure. Talks to: server.js POST `/api/chat`.
+**api.sendMessage** — Handles LLM communication. Receives: message history (the most recent 40 messages are sent), topic ID, abort signal (combined with a 35s timeout). Produces: `{ message, distress, safety }` or throws on failure. Talks to: server.js POST `/api/chat`.
 
 ## Flow Diagram
 
 1. User opens app → App renders in `phase: "landing"`.
 2. User clicks "Begin" → App sets `phase: "topics"`, shows topic selection grid.
 3. User selects a topic → App sets `phase: "active"`, `distress: 8`, stores selected topic.
-4. App calls `api.sendMessage([], topicId)` with empty history → server injects a synthetic `"(session start)"` user message (Claude API requires at least one) → character's opening message arrives.
+4. App calls `api.sendMessage([], topicId)` with empty history → server prepends a synthetic `"(session start)"` user message (on every request — the Claude API requires the first message to come from the user) → character's opening message arrives at distress 8.
 5. App appends character's message to `messages`, updates `distress` → Environment transitions.
 6. User types a message in Chat, submits → Chat validates (non-empty, under 1000 chars), calls `onSend`.
 7. App appends user message to `messages`, sets `loading: true` → Chat disables input.
-8. App calls `api.sendMessage(messages, topicId)` → server runs hard safety filter → if safe, proxies to LLM → response returns.
+8. App calls `api.sendMessage(messages, topicId)` → server runs hard safety filter → if safe, proxies to LLM (earlier character turns replayed as their JSON, including distress) → server limits the distress change to 2 points → response returns.
 9. If hard safety filter or LLM `safety: true` → App sets `phase: "safety"`, shows crisis resources.
 10. If API fails → App shows retry prompt, keeps `loading: false`.
 11. App appends character's response, updates `distress`, sets `loading: false`.
-12. If `distress === 0` → App sets `phase: "resolved"`, closing message displays (req 10).
-13. User can click "Try another conversation" or "Start over" → returns to topic selection.
+12. If `distress === 0` → App sets `phase: "resolved"`, the character's final reply and the closing message display (req 10).
+13. User can click "Try another conversation" or "Start over" → returns to topic selection ("Start over" cancels any in-flight request).
 
 ## State Management
 
@@ -97,7 +97,7 @@ All state lives in `App.jsx` via React `useState`. No external store.
 
 ## Safety Architecture
 
-**Layer 1 — Hard regex filter (src/safety.js):** Expanded regex patterns catch clearly dangerous content (violence toward specific targets, self-harm methods and planning, sexual content, assault, child exploitation, drug manufacturing, weapons creation) before the LLM is ever called. Shared module imported by both `server.js` and `test-e2e.js`. Returns a compassionate exit message and `safety: true`.
+**Layer 1 — Hard regex filter (src/safety.js):** Expanded regex patterns catch clearly dangerous content (violence toward specific targets, self-harm methods and planning, sexual content, assault, child exploitation, drug manufacturing, weapons creation) before the LLM is ever called. Shared module imported by `server.js`. Returns a compassionate exit message and `safety: true`.
 
 **Layer 2 — LLM soft safety (system prompt):** The system prompt instructs the LLM to set `"safety": true` in its JSON output if the user's message is outside the scope of supportive conversation. This handles nuanced/contextual cases the regex can't catch.
 

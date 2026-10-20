@@ -72,7 +72,8 @@ export default function App() {
         return;
       }
 
-      const charMsg = { role: "character", text: message };
+      // Distress is stored with the reply so the server can show the model its earlier levels.
+      const charMsg = { role: "character", text: message, distress: newDistress };
       const updated = [...msgs, charMsg];
       setMessages(updated);
       setDistress(newDistress);
@@ -84,7 +85,8 @@ export default function App() {
       if (err.name === "AbortError") return;
       setError(true);
     } finally {
-      setLoading(false);
+      // Skip if a newer request or "Start over" has taken ownership of the loading state.
+      if (abortRef.current === controller) setLoading(false);
     }
   }
 
@@ -114,6 +116,10 @@ export default function App() {
   }
 
   function handleBackToTopics() {
+    // Cancel any in-flight reply so it can't land in (or end) the next session.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
     setPhase("topics");
     setMessages([]);
     setDistress(INITIAL_DISTRESS);
@@ -206,10 +212,18 @@ export default function App() {
   // ─── Resolved ─────────────────────────────────────────────────────────────
 
   if (phase === "resolved") {
+    const finalWords = messages.at(-1)?.text;
     return (
       <div style={styles.centered}>
         <Environment distress={0} />
         <div style={styles.card}>
+          {/* The character's last reply — otherwise it would never be seen. */}
+          {finalWords && (
+            <div style={styles.finalWords}>
+              <span style={styles.finalWordsName}>{topic?.character}</span>
+              <p style={styles.finalWordsText}>{finalWords}</p>
+            </div>
+          )}
           <p style={styles.closing}>
             Stillness reached. Thank you for being here.
           </p>
@@ -244,12 +258,14 @@ export default function App() {
 
 // Warm therapist-office aesthetic — cream cards, serif headings, soft browns.
 const styles = {
+  // Scrolls when a card is taller than the viewport (e.g. topics or crisis resources on a phone).
   centered: {
     position: "relative",
     display: "flex",
-    alignItems: "center",
     justifyContent: "center",
     height: "100vh",
+    overflowY: "auto",
+    padding: "16px 0",
   },
   card: {
     position: "relative",
@@ -259,7 +275,8 @@ const styles = {
     backgroundColor: "rgba(245, 240, 232, 0.93)",
     borderRadius: "16px",
     boxShadow: "0 8px 32px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.1)",
-    margin: "0 16px",
+    // Auto vertical margins center the card, but collapse so a tall card starts at the top.
+    margin: "auto 16px",
     maxWidth: "460px",
   },
   title: {
@@ -282,10 +299,34 @@ const styles = {
   closing: {
     fontSize: "17px",
     color: "#3a2e22",
-    margin: "0 0 24px",
+    margin: "0 auto 24px",
     maxWidth: "340px",
     lineHeight: 1.6,
     fontFamily: "Georgia, 'Times New Roman', serif",
+  },
+  // Character's final reply on the resolved screen — matches the chat's character bubble.
+  finalWords: {
+    textAlign: "left",
+    margin: "0 0 22px",
+    padding: "10px 14px",
+    borderRadius: "14px",
+    borderBottomLeftRadius: "4px",
+    backgroundColor: "#fff",
+    border: "1px solid rgba(0,0,0,0.05)",
+  },
+  finalWordsName: {
+    display: "block",
+    marginBottom: "3px",
+    fontSize: "10px",
+    textTransform: "uppercase",
+    letterSpacing: "1px",
+    color: "#9e8b78",
+  },
+  finalWordsText: {
+    margin: 0,
+    fontSize: "15px",
+    lineHeight: 1.55,
+    color: "#2a2118",
   },
   button: {
     padding: "12px 32px",

@@ -9,7 +9,8 @@
     "server": "node server.js",
     "server:ollama": "LLM_PROVIDER=ollama node server.js",
     "start": "concurrently \"npm run server\" \"npm run dev\"",
-    "start:ollama": "concurrently \"npm run server:ollama\" \"npm run dev\""
+    "start:ollama": "concurrently \"npm run server:ollama\" \"npm run dev\"",
+    "test": "node test-unit.js && node test-e2e.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

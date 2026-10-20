@@ -1,5 +1,17 @@
 # Changelog
 
+## Gameplay Fixes
+
+- **Conversations past the first line**: The server now prepends the `"(session start)"` user turn to every request, not just the first. Previously every reply after the opening line was sent to Claude starting with an assistant message, which the API rejects, so sessions stalled on "needs a moment" after one exchange.
+- **Distress memory**: Character turns are replayed to the LLM as the JSON they produced, including `distress`, so the model can see its earlier levels instead of guessing them each turn. The server now also enforces the distress rules: sessions open at 8, change by at most 2 points per exchange, and a missing or `null` distress keeps the previous level (`null` used to read as 0 and end the session).
+- **Final words**: The resolved screen shows the character's last reply, which was previously never displayed.
+- **Long sessions**: The client sends the most recent 40 messages and the server accepts up to 100kb, so long conversations no longer hit the old 10kb limit and get stuck.
+- **Timeouts**: The client's 35s timeout now applies (it was dropped whenever a cancel signal was passed), and the Anthropic call is capped at 30s in total — SDK retries used to stretch it past 90s.
+- **"Start over" races**: In-flight replies are cancelled, so a late reply can no longer jump the topic screen to "resolved" or clear the loading state of the next session.
+- **Small screens**: Landing, topic, safety, and resolved cards scroll when taller than the viewport, so every character and crisis resource is reachable on phones.
+- **Parsing**: JSON wrapped in stray prose is extracted; the reply's text block is found by type rather than assumed to be first.
+- **Real-server E2E tests**: `test-e2e.js` now starts `server.js` against a mock Anthropic API that enforces the API's request rules, instead of testing a hand-copied mirror of the server. New runs cover distress rules, LLM context, prose-wrapped output, and request limits. `npm test` runs both suites. `CHAT_RATE_LIMIT` configures the chat rate limit (default 20/min).
+
 ## Quality Evaluation Fixes
 
 - **Characters renamed**: Replaced abstract names (Aria, Eliot, Maya, Jordan, Sam) with descriptive therapy archetypes (The New Graduate, The Widowed Parent, The Night-Shift Worker, The Single Parent, The Overworked Office Worker). Each character now has specific life-situation details in their prompt.

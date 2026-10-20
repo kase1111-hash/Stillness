@@ -57,8 +57,17 @@ npm run start:ollama
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `OLLAMA_MODEL` | `llama3.2` | Which Ollama model to use |
 | `PORT` | `3001` | Express server port |
+| `CHAT_RATE_LIMIT` | `20` | Max chat requests per minute per client |
 
 The app runs at `http://localhost:5173`. Vite proxies `/api` requests to Express on port 3001.
+
+### Run the tests
+
+```bash
+npm test
+```
+
+Runs the unit tests, then the E2E suite, which starts the real server against a mock LLM. No API key or Ollama needed.
 
 ## How to Play
 
@@ -94,7 +103,7 @@ src/Environment.jsx Therapist office scene — window, sky, rain, lamp, plant
 src/api.js          Client-side fetch wrapper for /api endpoints
 src/prompt.js       5 character prompts + shared distress/safety/output rules
 server.js           Express proxy with safety filter, Anthropic + Ollama support
-test-e2e.js         E2E test suite — 20 runs, 166 assertions
+test-e2e.js         E2E test suite — real server + mock LLM, 24 runs, 197 assertions
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical breakdown.

@@ -7,19 +7,21 @@
 import express from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
-import { getSystemPrompt, TOPICS } from "./src/prompt.js";
+import { getSystemPrompt, TOPICS, INITIAL_DISTRESS } from "./src/prompt.js";
 import { checkSafety, SAFETY_EXIT_MESSAGE } from "./src/safety.js";
-import { parseResponse } from "./src/parse.js";
+import { parseResponse, limitDistressChange } from "./src/parse.js";
 
 const app = express();
-app.use(express.json({ limit: "10kb" }));
+// Covers the client's 40-message history window, even at the 1000-character message limit.
+app.use(express.json({ limit: "100kb" }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
 
 // Log every request with method, path, status, and duration.
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
-    console.log(`${req.method} ${req.path} ${res.statusCode} ${Date.now() - start}ms`);
+    // originalUrl, not path: path is relative to the mount point (rate-limited chats would log as "/").
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
   });
   next();
 });
@@ -27,7 +29,7 @@ app.use((req, res, next) => {
 // Rate-limit chat endpoint to prevent LLM cost flooding.
 const chatLimiter = rateLimit({
   windowMs: 60_000,
-  max: 20,
+  max: Number(process.env.CHAT_RATE_LIMIT) || 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Please slow down — too many messages." },
@@ -39,6 +41,9 @@ const LLM_PROVIDER = process.env.LLM_PROVIDER || "anthropic";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
 const LLM_TIMEOUT_MS = 30_000; // 30-second timeout for LLM calls.
+
+// Synthetic first user turn — the character's opening line is generated in reply to it.
+const SESSION_START = "(session start)";
 
 // Lazy-load the Anthropic client only when needed.
 let anthropicClient = null;
@@ -52,12 +57,22 @@ async function getAnthropicClient() {
 
 // ─── Shared helpers ─────────────────────────────────────────────────────────
 
-// Converts internal message format ({role, text}) to LLM format ({role, content}).
+// Converts internal message format ({role, text, distress}) to LLM format ({role, content}).
+// Character turns are replayed as the JSON the model produced, so it can see its own
+// earlier distress levels. Every conversation opens with the synthetic session-start
+// turn: the opening line was generated from it, and the Anthropic API requires the
+// first message to come from the user.
 function formatMessages(messages) {
-  return messages.map((m) => ({
-    role: m.role === "user" ? "user" : "assistant",
-    content: m.text,
-  }));
+  const turns = messages.map((m) => (m.role === "user"
+    ? { role: "user", content: m.text }
+    : { role: "assistant", content: JSON.stringify({ message: m.text, distress: m.distress, safety: false }) }));
+  return [{ role: "user", content: SESSION_START }, ...turns];
+}
+
+// The character's distress after their latest reply, or the starting level before any.
+function previousDistress(messages) {
+  const d = messages.findLast((m) => m.role !== "user")?.distress;
+  return Number.isInteger(d) && d >= 0 && d <= 10 ? d : INITIAL_DISTRESS;
 }
 
 // Calls the Anthropic Claude API and returns the raw text response.
@@ -68,8 +83,13 @@ async function callAnthropic(systemPrompt, messages) {
     max_tokens: 512,
     system: systemPrompt,
     messages,
-  }, { timeout: LLM_TIMEOUT_MS });
-  return response.content[0].text;
+  }, {
+    // Bounds the whole call, SDK retries included — a per-attempt timeout would allow ~90s.
+    signal: AbortSignal.timeout(LLM_TIMEOUT_MS),
+  });
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock) throw new Error(`No text in response (stop_reason: ${response.stop_reason})`);
+  return textBlock.text;
 }
 
 // Calls the Ollama /api/chat endpoint and returns the raw text response.
@@ -124,16 +144,17 @@ app.get("/api/topics", (_req, res) => {
 
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages, topic } = req.body;
+    const { messages = [], topic } = req.body;
     if (!topic || typeof topic !== "string") {
       return res.status(400).json({ error: "Missing topic" });
     }
-
-    const formatted = formatMessages(messages || []);
+    if (!Array.isArray(messages) || !messages.every((m) => typeof m?.text === "string")) {
+      return res.status(400).json({ error: "Invalid messages" });
+    }
 
     // Hard safety check on the latest user message.
-    const lastUserMsg = formatted.length > 0 ? formatted[formatted.length - 1] : null;
-    if (lastUserMsg && lastUserMsg.role === "user" && checkSafety(lastUserMsg.content)) {
+    const lastMsg = messages.at(-1);
+    if (lastMsg?.role === "user" && checkSafety(lastMsg.text)) {
       return res.json({
         message: SAFETY_EXIT_MESSAGE,
         distress: 0,
@@ -142,9 +163,7 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const systemPrompt = getSystemPrompt(topic);
-    const llmMessages = formatted.length > 0
-      ? formatted
-      : [{ role: "user", content: "(session start)" }];
+    const llmMessages = formatMessages(messages);
 
     let text;
     try {
@@ -156,7 +175,13 @@ app.post("/api/chat", async (req, res) => {
       return res.status(502).json({ error: "They need a moment" });
     }
 
-    const result = parseResponse(text);
+    // Enforce the distress rules rather than trusting the model to follow them:
+    // sessions open at the starting level and move at most 2 points per exchange.
+    const before = previousDistress(messages);
+    const result = parseResponse(text, before);
+    result.distress = messages.length === 0
+      ? INITIAL_DISTRESS
+      : limitDistressChange(result.distress, before);
 
     // Safety check on LLM output.
     if (checkSafety(result.message)) {

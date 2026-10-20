@@ -1,8 +1,8 @@
-// Unit tests for parseResponse and extractJSON edge cases.
+// Unit tests for parseResponse, extractJSON, and limitDistressChange edge cases.
 // Covers alternate field names, out-of-range values, missing fields,
-// markdown fences, and malformed input.
+// markdown fences, stray prose, malformed input, and distress step limits.
 
-import { extractJSON, parseResponse } from "./src/parse.js";
+import { extractJSON, parseResponse, limitDistressChange } from "./src/parse.js";
 
 let passed = 0;
 let failed = 0;
@@ -55,6 +55,13 @@ assert(
   "text surrounding fences", `Got: ${extractJSON(withSurrounding)}`
 );
 
+// Prose before and after unfenced JSON
+const withProse = 'Sure, here you go:\n{"message":"test","distress":4}\nLet me know!';
+assert(
+  extractJSON(withProse) === '{"message":"test","distress":4}',
+  "prose surrounding unfenced JSON", `Got: ${extractJSON(withProse)}`
+);
+
 // ─── parseResponse tests ────────────────────────────────────────────────────
 
 console.log("\n── parseResponse ──\n");
@@ -101,6 +108,35 @@ console.log("\n── parseResponse ──\n");
 {
   const r = parseResponse('{"message":"hi","safety":false}');
   assert(r.distress === 8, "missing distress — defaults to 8", `Got: ${r.distress}`);
+}
+
+// Null or empty distress — falls back instead of reading as 0 (which would end the session)
+{
+  const r = parseResponse('{"message":"hi","distress":null,"safety":false}');
+  assert(r.distress === 8, "null distress — defaults to 8", `Got: ${r.distress}`);
+}
+{
+  const r = parseResponse('{"message":"hi","distress":"","safety":false}');
+  assert(r.distress === 8, "empty-string distress — defaults to 8", `Got: ${r.distress}`);
+}
+
+// Numeric-string distress — parsed
+{
+  const r = parseResponse('{"message":"hi","distress":"6","safety":false}');
+  assert(r.distress === 6, "numeric-string distress — parsed", `Got: ${r.distress}`);
+}
+
+// Missing distress — uses the provided fallback
+{
+  const r = parseResponse('{"message":"hi","safety":false}', 3);
+  assert(r.distress === 3, "missing distress — uses fallback", `Got: ${r.distress}`);
+}
+
+// Prose-wrapped response
+{
+  const r = parseResponse('Here is my reply:\n{"message":"wrapped","distress":5,"safety":false}\nHope that helps.');
+  assert(r.message === "wrapped", "prose-wrapped response — message", `Got: ${r.message}`);
+  assert(r.distress === 5, "prose-wrapped response — distress", `Got: ${r.distress}`);
 }
 
 // Distress above 10 — clamped to 10
@@ -157,6 +193,17 @@ assertThrows(
   () => parseResponse(""),
   "empty string — throws"
 );
+
+// ─── limitDistressChange tests ──────────────────────────────────────────────
+
+console.log("\n── limitDistressChange ──\n");
+
+assert(limitDistressChange(5, 6) === 5, "small drop — unchanged", `Got: ${limitDistressChange(5, 6)}`);
+assert(limitDistressChange(7, 6) === 7, "small rise — unchanged", `Got: ${limitDistressChange(7, 6)}`);
+assert(limitDistressChange(0, 6) === 4, "large drop — limited to 2", `Got: ${limitDistressChange(0, 6)}`);
+assert(limitDistressChange(10, 2) === 4, "large rise — limited to 2", `Got: ${limitDistressChange(10, 2)}`);
+assert(limitDistressChange(0, 1) === 0, "drop to 0 within step — allowed", `Got: ${limitDistressChange(0, 1)}`);
+assert(limitDistressChange(10, 9) === 10, "rise to 10 within step — allowed", `Got: ${limitDistressChange(10, 9)}`);
 
 // ─── Report ─────────────────────────────────────────────────────────────────
 
